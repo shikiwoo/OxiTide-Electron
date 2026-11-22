@@ -9,6 +9,9 @@
 # Node / Svelte / Vite
 node_modules/
 /ui/dist
+/ui/dist-electron
+/electron/node_modules
+/electron/out
 /ui/.vite
 /ui/build
 # Development-only pseudo-locale (node scripts/i18n/pseudo.mjs)

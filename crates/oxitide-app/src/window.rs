@@ -11,6 +11,10 @@ use crate::state::AppState;
 /// GTK on KWin Wayland can remap it at a stale, work-area size (2026-11-05
 /// Linux run, L5).
 pub fn show_main(app: &AppHandle) {
+    if crate::shell::electron() {
+        crate::shell::notify(app, "show", serde_json::Value::Null);
+        return;
+    }
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
@@ -111,6 +115,10 @@ pub const FIRST_SHOW_FALLBACK: std::time::Duration = std::time::Duration::from_m
 /// Later page loads (reloads) do nothing, so a window hidden to the tray
 /// stays hidden.
 pub fn first_show_gate(app: &AppHandle, gate: u8) {
+    if crate::shell::electron() {
+        // Electron shows its own window; this one only carries IPC.
+        return;
+    }
     if !FIRST_SHOW.arrive(gate) {
         return;
     }

@@ -25,6 +25,18 @@ mod scheme;
 mod scrobble;
 mod session;
 mod shell_text;
+#[cfg(unix)]
+mod shell;
+#[cfg(not(unix))]
+mod shell {
+    //! Electron shell mode is Linux-only for now.
+    pub const BLANK_PAGE: &str = "shell-blank.html";
+    pub fn electron() -> bool {
+        false
+    }
+    pub fn start(_app: &tauri::AppHandle) {}
+    pub fn notify(_app: &tauri::AppHandle, _kind: &str, _data: serde_json::Value) {}
+}
 mod state;
 mod stored_ref;
 mod thumbbar;
@@ -129,7 +141,7 @@ pub(crate) fn save_window_state(app: &tauri::AppHandle) {
 /// Complete a login from a `tidal://login/auth?code=…` URL. Ignores any other
 /// deep link. Runs off the event thread; the result reaches the UI through both
 /// the `auth://*` event and the buffered `auth_take_result`.
-fn handle_deep_link(app: &tauri::AppHandle, raw: &str) {
+pub(crate) fn handle_deep_link(app: &tauri::AppHandle, raw: &str) {
     if auth::validate_redirect(raw).is_err() {
         tracing::debug!("ignoring non-login deep link: {raw}");
         return;
@@ -282,6 +294,9 @@ fn main() {
             // An explicit saved language labels the tray from the start;
             // "system" waits for the UI's `set_shell_language`.
             shell_text::set_language(&app.state::<AppState>().config().ui.language);
+            if shell::electron() {
+                shell::start(app.handle());
+            }
             match tray::build(app.handle()) {
                 Ok((icon, items)) => app.state::<AppState>().set_tray(icon, items),
                 Err(e) => tracing::warn!("system tray unavailable: {e}"),
@@ -305,7 +320,10 @@ fn main() {
                 }));
                 scrobbler.start();
             }
-            if let Some(window) = app.get_webview_window("main") {
+            if let Some(window) = app
+                .get_webview_window("main")
+                .filter(|_| !shell::electron())
+            {
                 // Before the first show, so the system frame never flashes.
                 titlebar::install(&window);
                 webview_idle::install(&window);
@@ -367,12 +385,16 @@ fn main() {
                         cache.cleanup();
                         perf::mark("cache_cleanup_done");
                     }
-                    scheme::remember(scheme::snapshot());
-                    #[cfg(any(windows, target_os = "linux"))]
-                    if let Err(e) = bg.deep_link().register_all() {
-                        tracing::warn!("deep link registration failed: {e}");
+                    // The Electron shell registers its own tidal:// handler
+                    // (its desktop entry), so the backend leaves it alone.
+                    if !shell::electron() {
+                        scheme::remember(scheme::snapshot());
+                        #[cfg(any(windows, target_os = "linux"))]
+                        if let Err(e) = bg.deep_link().register_all() {
+                            tracing::warn!("deep link registration failed: {e}");
+                        }
+                        scheme::arm_restore();
                     }
-                    scheme::arm_restore();
                     perf::mark("startup_background_done");
                 });
             if let Err(e) = spawned {
@@ -581,7 +603,7 @@ fn main() {
             commands::revoke_remote_device,
             commands::resolve_remote_pair_request,
         ])
-        .build(tauri::generate_context!())
+        .build(context())
         .expect("error while building OxiTide")
         .run(|app_handle, event| match event {
             tauri::RunEvent::WindowEvent {
@@ -605,6 +627,19 @@ fn main() {
             tauri::RunEvent::Exit => run_exit_work(app_handle),
             _ => {}
         });
+}
+
+/// The generated context; in Electron shell mode the main window loads a
+/// blank page instead of the UI (it stays hidden and only carries IPC).
+fn context() -> tauri::Context {
+    let mut context = tauri::generate_context!();
+    if shell::electron() {
+        if let Some(window) = context.config_mut().app.windows.first_mut() {
+            window.url = tauri::WebviewUrl::App(shell::BLANK_PAGE.into());
+            window.visible = false;
+        }
+    }
+    context
 }
 
 /// Shutdown persistence. Runs on `RunEvent::Exit`, and before a Windows update

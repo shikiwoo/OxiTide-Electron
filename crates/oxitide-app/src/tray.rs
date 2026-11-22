@@ -149,6 +149,10 @@ pub fn run(app: &AppHandle, action: TrayAction) {
 
 /// Show and focus the window when hidden/minimized, hide it when visible.
 pub fn toggle_window(app: &AppHandle) {
+    if crate::shell::electron() {
+        crate::shell::notify(app, "toggle", serde_json::Value::Null);
+        return;
+    }
     let Some(window) = app.get_webview_window("main") else {
         return;
     };

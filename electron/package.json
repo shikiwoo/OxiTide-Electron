@@ -1,0 +1,14 @@
+{
+  "name": "oxitide-electron",
+  "private": true,
+  "description": "OxiTide UI in an Electron (Chromium) shell over the Rust backend",
+  "license": "AGPL-3.0-or-later",
+  "main": "main.cjs",
+  "desktopName": "oxitide-electron.desktop",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "45.2.3"
+  }
+}

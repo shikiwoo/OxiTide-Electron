@@ -3069,6 +3069,23 @@ pub fn set_mini_mode(
     window: tauri::WebviewWindow,
     active: bool,
 ) -> Result<(), String> {
+    if crate::shell::electron() {
+        // Electron owns the real window: it resizes and keeps its own stash.
+        crate::shell::notify(
+            window.app_handle(),
+            "mini",
+            serde_json::json!({
+                "active": active,
+                "width": crate::window::MINI_WIDTH,
+                "height": crate::window::MINI_HEIGHT,
+                "minWidth": crate::window::MINI_MIN_WIDTH,
+                "minHeight": crate::window::MINI_MIN_HEIGHT,
+                "fullMinWidth": crate::window::FULL_MIN_WIDTH,
+                "fullMinHeight": crate::window::FULL_MIN_HEIGHT,
+            }),
+        );
+        return Ok(());
+    }
     let current = state.pre_mini();
     // Idempotent (spec §5.3): a repeated enter keeps the original stash.
     if active && current.is_some() {
