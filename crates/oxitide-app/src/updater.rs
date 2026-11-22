@@ -52,11 +52,17 @@ fn support_reason(windows: bool, linux: bool, appimage: bool) -> Option<&'static
 }
 
 pub fn support(check_on_start: bool) -> UpdateSupport {
-    let reason = support_reason(
-        cfg!(windows),
-        cfg!(target_os = "linux"),
-        std::env::var_os("APPIMAGE").is_some(),
-    );
+    // The Electron shell's releases are not upstream's: never let the upstream
+    // updater replace this install (even when it runs from an AppImage).
+    let reason = if crate::shell::electron() {
+        Some("Updates for the Electron build come from its own releases.")
+    } else {
+        support_reason(
+            cfg!(windows),
+            cfg!(target_os = "linux"),
+            std::env::var_os("APPIMAGE").is_some(),
+        )
+    };
     UpdateSupport {
         supported: reason.is_none(),
         reason: reason.map(str::to_string),

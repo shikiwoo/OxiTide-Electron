@@ -7,6 +7,6 @@ npm --prefix ui ci
 npm --prefix ui run build            # Tauri's embedded dist (phone remote + blank page)
 npm --prefix ui run build:electron   # the UI Electron renders
 cargo build --release -p oxitide-app
-npm --prefix electron install
+npm --prefix electron ci
 node electron/node_modules/electron/install.js   # fetches the Electron binary (checksum-verified)
 echo "Built. Run with: ./electron/run.sh"

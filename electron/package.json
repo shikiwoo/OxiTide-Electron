@@ -1,14 +1,70 @@
 {
   "name": "oxitide-electron",
+  "productName": "OxiTide",
+  "version": "0.0.0-dev",
   "private": true,
   "description": "OxiTide UI in an Electron (Chromium) shell over the Rust backend",
   "license": "AGPL-3.0-or-later",
+  "author": "shikiwoo",
+  "homepage": "https://github.com/shikiwoo/OxiTide-Electron",
   "main": "main.cjs",
   "desktopName": "oxitide-electron.desktop",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "appimage": "electron-builder --linux AppImage --publish never"
   },
   "devDependencies": {
-    "electron": "45.2.3"
+    "electron": "45.2.3",
+    "electron-builder": "26.18.1"
+  },
+  "build": {
+    "appId": "io.github.shikiwoo.oxitide-electron",
+    "productName": "OxiTide",
+    "artifactName": "OxiTide-Electron-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "out/dist"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../target/release/oxitide-app",
+        "to": "backend/oxitide-app"
+      },
+      {
+        "from": "../ui/dist-electron",
+        "to": "ui"
+      },
+      {
+        "from": "../crates/oxitide-app/icons/icon.png",
+        "to": "icon.png"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "TIDAL login",
+        "schemes": [
+          "tidal"
+        ]
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Audio",
+      "icon": "../crates/oxitide-app/icons/icon.png",
+      "executableName": "oxitide-electron",
+      "synopsis": "Unofficial TIDAL client (OxiTide, Chromium UI)",
+      "desktop": {
+        "entry": {
+          "Name": "OxiTide",
+          "StartupWMClass": "oxitide-electron"
+        }
+      }
+    }
   }
 }

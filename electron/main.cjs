@@ -18,9 +18,33 @@ const { pathToFileURL } = require("node:url");
 const crypto = require("node:crypto");
 
 const ROOT = path.resolve(__dirname, "..");
-const UI_DIR = process.env.OXITIDE_UI_DIR || path.join(ROOT, "ui", "dist-electron");
+// Packaged (AppImage): the backend, UI and icon ship as extraResources
+// (electron/package.json "build"); from the repo, they're the build outputs.
+const RES = app.isPackaged ? process.resourcesPath : null;
+const UI_DIR =
+  process.env.OXITIDE_UI_DIR || (RES ? path.join(RES, "ui") : path.join(ROOT, "ui", "dist-electron"));
 const BACKEND =
-  process.env.OXITIDE_BACKEND || path.join(ROOT, "target", "release", "oxitide-app");
+  process.env.OXITIDE_BACKEND ||
+  (RES ? path.join(RES, "backend", "oxitide-app") : path.join(ROOT, "target", "release", "oxitide-app"));
+const ICON = RES ? path.join(RES, "icon.png") : path.join(ROOT, "crates", "oxitide-app", "icons", "128x128.png");
+
+// Inside an AppImage, keep its mount out of everything this process starts
+// (backend, xdg-open for links): its bundled libs break host tools (e.g.
+// /usr/bin/flatpak launching a Flatpak browser), and APPIMAGE would make the
+// backend's upstream updater think it may replace this file.
+if (process.env.APPIMAGE || process.env.APPDIR) {
+  const mount = process.env.APPDIR;
+  const strip = (v) =>
+    (v || "")
+      .split(":")
+      .filter((p) => p && !(mount && p.startsWith(mount)) && !p.startsWith("/tmp/.mount_"))
+      .join(":");
+  for (const key of ["PATH", "XDG_DATA_DIRS"]) process.env[key] = strip(process.env[key]);
+  const ld = strip(process.env.LD_LIBRARY_PATH);
+  if (ld) process.env.LD_LIBRARY_PATH = ld;
+  else delete process.env.LD_LIBRARY_PATH;
+  for (const key of ["APPIMAGE", "APPDIR", "ARGV0", "OWD"]) delete process.env[key];
+}
 const CONFIG_DIR = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "oxitide");
 const GEOMETRY_FILE = path.join(CONFIG_DIR, "electron-window.json");
 
@@ -280,7 +304,7 @@ function createWindow() {
     title: "OxiTide",
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#0e0e11" : "#f6f6f7",
     autoHideMenuBar: true,
-    icon: path.join(ROOT, "crates", "oxitide-app", "icons", "128x128.png"),
+    icon: ICON,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,

@@ -76,7 +76,34 @@ Experimental. Tested on one machine: Bazzite (Fedora 45, KDE Plasma 6.8 on Wayla
 | Session restore, playback, tray, mini player, zoom, `tidal://` login | Implemented, not fully tested yet |
 | AutoMix lab (raw binary IPC response) | Implemented, untested |
 | Windows / macOS | Not supported: shell mode is Unix-only (the Tauri build there is unaffected) |
-| Self-update | Off: the upstream updater only installs over AppImages |
+| AppImage (CI) | Built by `.github/workflows/appimage.yml`; launch from the AppImage not yet tested |
+| Self-update | Off: download new AppImages from Releases |
+
+## Install (AppImage)
+
+[GitHub Actions](.github/workflows/appimage.yml) builds an AppImage on every push to `main` (downloadable from the run's
+**Artifacts** for 14 days) and publishes a Release for every `electron-v*` tag, e.g. `electron-v1.1.8-1`:
+
+```bash
+git tag electron-v1.1.8-1 && git push origin electron-v1.1.8-1
+```
+
+```bash
+chmod +x OxiTide-Electron-*-x86_64.AppImage
+./OxiTide-Electron-*-x86_64.AppImage
+```
+
+- **System libraries:** the AppImage bundles Electron, but the backend uses the system's **WebKitGTK 4.1**, GTK 3,
+  libayatana-appindicator3 (or libappindicator3) and libxdo. They're on most desktops: Fedora/Bazzite, Ubuntu 22.04+
+  (`libwebkit2gtk-4.1-0`), Debian 12+, Arch (`webkit2gtk-4.1`).
+- **Sandbox:** electron-builder starts AppImages with `--no-sandbox`, because Chromium's setuid sandbox helper can't
+  run from a read-only AppImage mount. The window only loads the app's own files and TIDAL artwork.
+- **Updates:** no auto-update. Download the next release. The upstream updater is disabled in this build, so it can't
+  replace the file with an upstream OxiTide AppImage.
+- **Menu entry and `tidal://` login:** use an AppImage integrator (Gear Lever, AppImageLauncher), or the desktop entry
+  under [Run](#run) with `Exec=/path/to/OxiTide-Electron.AppImage %u`.
+
+Build locally with `./electron/package.sh [version]`. Its output goes to `electron/out/dist/`.
 
 ## Build
 
@@ -154,7 +181,9 @@ The fork is upstream `main` plus a small, self-contained set of changes:
 | `crates/oxitide-app/src/shell.rs` | The bridge (new) |
 | `main.rs`, `window.rs`, `tray.rs`, `commands.rs` | A few `if shell::electron()` branches |
 | `ui/src/shell/`, `ui/vite.config.ts`, `ui/public/shell-blank.html` | Shims and the `electron` build mode |
-| `electron/` | The Electron app and scripts |
+| `electron/` | The Electron app, scripts and electron-builder config |
+| `crates/oxitide-app/src/updater.rs` | Upstream updater disabled in shell mode |
+| `.github/workflows/appimage.yml` | AppImage build and releases |
 
 ```bash
 git remote add upstream https://github.com/Zephulbr/OxiTide.git
