@@ -309,6 +309,14 @@ pub fn enter_mini(window: &WebviewWindow, stash: FullGeometry) -> tauri::Result<
 /// 100 % (its fixed size has no room for larger text), so callers pass 100
 /// while it shows. A failure only logs: zoom is cosmetic.
 pub fn apply_zoom(window: &WebviewWindow, percent: u32) {
+    if crate::shell::electron() {
+        crate::shell::notify(
+            window.app_handle(),
+            "zoom",
+            serde_json::json!({ "factor": f64::from(percent) / 100.0 }),
+        );
+        return;
+    }
     if let Err(e) = window.set_zoom(f64::from(percent) / 100.0) {
         tracing::warn!("failed to set the interface zoom: {e}");
     }

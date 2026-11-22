@@ -68,6 +68,7 @@ let backend = null;
 let sock = null;
 let quitting = false;
 let miniStash = null;
+let zoomFactor = 1; // the UI zoom setting; the mini player stays at 100 %
 let nextId = 1;
 const pending = new Map();
 let outbox = [];
@@ -159,13 +160,19 @@ function onShellRequest(kind, data) {
         if (miniStash.maximized) win.unmaximize();
         win.setMinimumSize(data.minWidth, data.minHeight);
         win.setSize(data.width, data.height);
+        win.webContents.setZoomFactor(1);
       } else if (!data.active && miniStash) {
         const stash = miniStash;
         miniStash = null;
         win.setMinimumSize(data.fullMinWidth, data.fullMinHeight);
         win.setBounds(stash.bounds);
         if (stash.maximized) win.maximize();
+        win.webContents.setZoomFactor(zoomFactor);
       }
+      break;
+    case "zoom":
+      zoomFactor = data.factor;
+      if (!miniStash) win.webContents.setZoomFactor(zoomFactor);
       break;
     default:
       console.warn("[shell] unknown shell request:", kind);
@@ -286,6 +293,9 @@ function createWindow() {
   if (g.maximized) win.maximize();
 
   win.once("ready-to-show", () => win.show());
+  win.webContents.on("did-finish-load", () => {
+    if (!miniStash) win.webContents.setZoomFactor(zoomFactor);
+  });
   // Renderer warnings/errors land in the shell's stdout (run.sh's log).
   win.webContents.on("console-message", (e) => {
     if (e.level === "warning" || e.level === "error") {

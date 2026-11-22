@@ -24,9 +24,9 @@ mod remote;
 mod scheme;
 mod scrobble;
 mod session;
-mod shell_text;
 #[cfg(unix)]
 mod shell;
+mod shell_text;
 #[cfg(not(unix))]
 mod shell {
     //! Electron shell mode is Linux-only for now.
@@ -296,6 +296,12 @@ fn main() {
             shell_text::set_language(&app.state::<AppState>().config().ui.language);
             if shell::electron() {
                 shell::start(app.handle());
+                let zoom = config::clamp_zoom(app.state::<AppState>().config().ui.zoom);
+                shell::notify(
+                    app.handle(),
+                    "zoom",
+                    serde_json::json!({ "factor": f64::from(zoom) / 100.0 }),
+                );
             }
             match tray::build(app.handle()) {
                 Ok((icon, items)) => app.state::<AppState>().set_tray(icon, items),
