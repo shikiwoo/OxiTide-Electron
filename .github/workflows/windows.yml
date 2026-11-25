@@ -1,0 +1,56 @@
+name: Windows installer
+
+# Builds the fork's UI in the regular Tauri shell for Windows (WebView2 is
+# Chromium, so the Electron shell, which is Unix-only, isn't needed there).
+# tauri.fork.conf.json points the updater at this repository instead of
+# upstream, so an install never "updates" itself to upstream OxiTide.
+# Manual runs only; the per-user NSIS installer is a workflow artifact.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  nsis:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Read the pinned toolchain
+        id: rust
+        shell: bash
+        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)".*/\1/p' rust-toolchain.toml | tr -d '\r')" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust.outputs.channel }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI dependencies
+        run: npm --prefix ui ci
+
+      - name: Build the installer
+        shell: bash
+        run: npm --prefix ui run app:build -- --config crates/oxitide-app/tauri.fork.conf.json --bundles nsis
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: OxiTide-windows-nsis
+          path: target/release/bundle/nsis/*.exe
+          if-no-files-found: error
