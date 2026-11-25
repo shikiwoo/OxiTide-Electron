@@ -188,6 +188,10 @@ impl AudioConfig {
         if oxitide_audio::output::is_asio_device(id) {
             return OutputMode::Exclusive;
         }
+        // macOS plays shared only, whatever a synced config says.
+        if cfg!(target_os = "macos") {
+            return OutputMode::Shared;
+        }
         self.devices
             .get(id)
             .map(|prefs| prefs.mode)

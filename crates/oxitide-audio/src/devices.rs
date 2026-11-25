@@ -16,6 +16,8 @@ pub enum DeviceGroup {
     Wasapi,
     Asio,
     Alsa,
+    /// macOS (fork-only port).
+    CoreAudio,
 }
 
 /// What the device is, for its icon.
@@ -501,7 +503,11 @@ pub fn probe_caps(device: &OutputDevice) -> Option<DeviceCaps> {
     {
         crate::alsa_output::probe_caps(&device.id)
     }
-    #[cfg(not(any(windows, target_os = "linux")))]
+    #[cfg(target_os = "macos")]
+    {
+        crate::coreaudio_output::probe_caps(&device.id)
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     {
         let _ = device;
         None

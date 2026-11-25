@@ -1,0 +1,66 @@
+name: macOS app
+
+# Fork-only macOS port: builds the regular Tauri shell (WKWebView scrolls
+# fine, so the Electron shell isn't needed) as a universal .dmg (Apple
+# Silicon + Intel). tauri.macos.conf.json is merged in automatically;
+# tauri.fork.conf.json points the updater at this repository.
+# Unsigned: on first launch macOS says the app is damaged; clear the
+# quarantine flag with `xattr -cr /Applications/OxiTide.app`.
+# Manual runs only; the .dmg is a workflow artifact.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  dmg:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Read the pinned toolchain
+        id: rust
+        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)".*/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust.outputs.channel }}
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI dependencies
+        run: npm --prefix ui ci
+
+      - name: Clippy (macOS code paths)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build the app
+        run: npm --prefix ui run app:build -- --config crates/oxitide-app/tauri.fork.conf.json --target universal-apple-darwin --bundles app,dmg
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: OxiTide-macos-dmg
+          path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+      # After the upload, so a test that assumes Linux or Windows doesn't
+      # block getting the .dmg.
+      - name: Tests
+        run: cargo test --workspace

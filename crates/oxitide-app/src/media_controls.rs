@@ -11,13 +11,20 @@ mod win;
 #[path = "media_controls_linux.rs"]
 mod linux;
 
+#[cfg(target_os = "macos")]
+#[path = "media_controls_macos.rs"]
+mod macos;
+
 #[cfg(windows)]
 pub use win::MediaSession;
+
+#[cfg(target_os = "macos")]
+pub use macos::MediaSession;
 
 #[cfg(target_os = "linux")]
 pub use linux::MediaSession;
 
-#[cfg(not(any(windows, target_os = "linux")))]
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 pub use stub::MediaSession;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -309,7 +316,7 @@ pub fn track_path(track_id: u64) -> String {
     format!("/com/oxitide/track/t{track_id}")
 }
 
-#[cfg(not(any(windows, target_os = "linux")))]
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 mod stub {
     use std::sync::mpsc;
 

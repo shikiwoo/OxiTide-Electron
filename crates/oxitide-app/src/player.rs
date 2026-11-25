@@ -95,7 +95,11 @@ pub fn real_output() -> Box<dyn AudioOutput> {
     {
         Box::new(oxitide_audio::alsa_output::AlsaOutput::new())
     }
-    #[cfg(not(any(windows, target_os = "linux")))]
+    #[cfg(target_os = "macos")]
+    {
+        Box::new(oxitide_audio::coreaudio_output::CoreAudioOutput::new())
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     {
         Box::new(oxitide_audio::output::NullOutput::new())
     }
@@ -256,6 +260,9 @@ pub struct OutputDeviceListDto {
     /// `(old id, new id)`: a device whose id changed (a USB DAC on another
     /// port) that should take over the old id's settings (`move_device_prefs`).
     pub moved: Vec<(String, String)>,
+    /// False on macOS, which only plays shared: the picker hides the mode
+    /// toggle.
+    pub exclusive_available: bool,
 }
 
 /// The connected devices, or none (logged as a warning).
@@ -281,6 +288,8 @@ pub fn transport_name(transport: Transport) -> &'static str {
 fn group_of(id: &str) -> DeviceGroup {
     if output::is_asio_device(id) {
         DeviceGroup::Asio
+    } else if cfg!(target_os = "macos") {
+        DeviceGroup::CoreAudio
     } else if id.starts_with("hw:") || cfg!(target_os = "linux") {
         DeviceGroup::Alsa
     } else {
@@ -414,6 +423,7 @@ pub fn device_list_dto(
         selected: audio.output_device.clone(),
         icons: true,
         moved,
+        exclusive_available: !cfg!(target_os = "macos"),
     }
 }
 

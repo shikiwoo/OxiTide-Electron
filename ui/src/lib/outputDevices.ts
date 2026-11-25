@@ -26,9 +26,10 @@ const GROUP_LABELS: Record<DeviceGroup, string> = {
   get wasapi() { return t("device.group.wasapi"); },
   asio: "ASIO",
   get alsa() { return t("device.group.alsa"); },
+  coreaudio: "Core Audio",
 };
 
-const GROUP_ORDER: DeviceGroup[] = ["wasapi", "alsa", "asio"];
+const GROUP_ORDER: DeviceGroup[] = ["wasapi", "alsa", "coreaudio", "asio"];
 
 /** The name a row shows: the nickname, else the device's clean name. */
 export function displayName(device: OutputDevice): string {

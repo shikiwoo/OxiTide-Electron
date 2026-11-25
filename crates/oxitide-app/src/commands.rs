@@ -499,7 +499,19 @@ fn build_player(
         }
         found
     };
-    #[cfg(not(any(windows, target_os = "linux")))]
+    #[cfg(target_os = "macos")]
+    let smtc_sender = {
+        let mut found = None;
+        match crate::media_controls::MediaSession::spawn(engine.clone(), config.integrations.smtc) {
+            Ok(session) => {
+                found = Some(session.sender());
+                state.set_media(session);
+            }
+            Err(e) => tracing::warn!("Now Playing disabled: {e}"),
+        }
+        found
+    };
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     let smtc_sender: Option<crate::media_controls::SessionSender> = None;
     let discord_sender = match crate::discord::DiscordPresence::spawn(config.integrations.discord) {
         Ok(service) => {

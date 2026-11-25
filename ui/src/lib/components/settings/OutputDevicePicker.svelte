@@ -242,7 +242,7 @@
   <div class="detail">
     {#if asio}
       <span class="always">{t("device.alwaysExclusive")}</span>
-    {:else}
+    {:else if list?.exclusive_available !== false}
       <Segmented label={t("device.outputMode")} value={mode} options={MODE_OPTIONS} onchange={(m) => setMode(id, m)} />
     {/if}
     <!-- What is playing now is the player bar's to say; this is what the device can do. -->

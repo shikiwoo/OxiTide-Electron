@@ -7,6 +7,8 @@ pub mod automix;
 pub mod beat;
 pub mod cache;
 pub mod connectivity;
+#[cfg(any(target_os = "macos", test))]
+pub mod coreaudio_output;
 pub mod decode;
 pub mod demux;
 pub mod devices;
@@ -23,7 +25,7 @@ pub mod output;
 pub mod perf;
 pub mod queue;
 pub mod retry;
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 pub(crate) mod ring;
 pub mod routed_output;
 pub mod seek;

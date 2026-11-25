@@ -5,7 +5,9 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use rtrb::{Consumer, Producer};
+#[cfg(any(windows, test))]
+use rtrb::Consumer;
+use rtrb::Producer;
 
 use crate::error::{Error, Result};
 
@@ -154,6 +156,7 @@ pub(crate) fn queued_ms(capacity: usize, free_slots: usize, samples_per_sec: usi
 /// underrun never shifts the channels, and silence (all-zero bytes, which is
 /// 0.0 f32 and 0 i32) for whatever the ring cannot cover. `out` is reused by
 /// the caller across device periods. Returns the frames taken from the ring.
+#[cfg(any(windows, test))]
 pub(crate) fn pop_frames_le(
     consumer: &mut Consumer<u32>,
     channels: usize,

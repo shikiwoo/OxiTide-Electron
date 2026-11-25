@@ -382,6 +382,8 @@ fn main() {
             // not needed for the first frame, so they run off the critical
             // path. A quit before this finishes simply skips the scheme
             // restore (no snapshot remembered).
+            // macOS registers tidal:// through the bundle's Info.plist.
+            #[cfg_attr(not(any(windows, target_os = "linux")), allow(unused_variables))]
             let bg = app.handle().clone();
             let cache = app.state::<AppState>().cache();
             let spawned = std::thread::Builder::new()

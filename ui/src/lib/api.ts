@@ -369,7 +369,7 @@ export interface PlayFromDto {
 }
 /** Output picker (Rust `player::OutputDeviceListDto`, spec 2026-11-05). */
 export type OutputMode = "shared" | "exclusive";
-export type DeviceGroup = "wasapi" | "asio" | "alsa";
+export type DeviceGroup = "wasapi" | "asio" | "alsa" | "coreaudio";
 export type DeviceKind =
   | "speakers" | "headphones" | "headset" | "hdmi" | "spdif" | "line" | "bluetooth" | "usb" | "virtual" | "unknown";
 export type DeviceTransport = "usb" | "bluetooth" | "hdmi" | "internal" | "virtual" | "unknown";
@@ -415,6 +415,8 @@ export interface OutputDeviceList {
   icons: boolean;
   /** [old id, new id]: a device back under a new id (`moveDevicePrefs`). */
   moved: [string, string][];
+  /** False on macOS (shared only): the picker hides the mode toggle. */
+  exclusive_available?: boolean;
 }
 export interface DevicePrefsPatch {
   nickname?: string;
