@@ -18,4 +18,7 @@ describe("shareUrl", () => {
   it("builds artist links from the numeric id", () => {
     expect(shareUrl("artist", 945)).toBe("https://tidal.com/artist/945");
   });
+  it("builds track links from the numeric id", () => {
+    expect(shareUrl("track", 77646169)).toBe("https://tidal.com/track/77646169");
+  });
 });

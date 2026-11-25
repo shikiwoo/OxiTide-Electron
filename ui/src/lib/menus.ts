@@ -15,6 +15,8 @@ export interface TrackMenuContext {
   addToQueue(): void;
   addToPlaylist(): void;
   copyTitle(): void;
+  /// Copies the track's TIDAL link; absent where the surface does not offer it.
+  copyLink?: () => void;
   /// Opens the track info modal.
   trackInfo(): void;
   /// Opens the track's album; absent when it has none or it is the current
@@ -31,6 +33,11 @@ export interface TrackMenuContext {
     busy: boolean;
     disabled: boolean;
   };
+}
+
+/// "Copy link" beside "Copy title", where the surface offers it.
+function copyLinkItems(copyLink: (() => void) | undefined): MenuItem[] {
+  return copyLink ? [{ id: "copy-link", label: t("menu.copyLink"), icon: "link", run: () => copyLink() }] : [];
 }
 
 /// Track row items, grouped playback / library / utility with the playlist
@@ -90,6 +97,7 @@ export function trackMenuItems(ctx: TrackMenuContext): MenuItem[] {
       divider: true,
       run: () => ctx.copyTitle(),
     },
+    ...copyLinkItems(ctx.copyLink),
     { id: "track-info", label: t("menu.trackInfo"), icon: "info", run: () => ctx.trackInfo() },
   ];
   const playlist = ctx.playlist;
@@ -200,6 +208,7 @@ export function nowPlayingMenuItems(ctx: GoToTargets & {
   addToPlaylist?: () => void;
   later?: LaterToggle;
   copyTitle(): void;
+  copyLink?: () => void;
   trackInfo(): void;
 }): MenuItem[] {
   const items: MenuItem[] = [];
@@ -220,6 +229,7 @@ export function nowPlayingMenuItems(ctx: GoToTargets & {
     ...laterItems(ctx.later),
     ...goToItems(ctx),
     { id: "copy-title", label: t("menu.copyTitle"), icon: "copy", divider: true, run: () => ctx.copyTitle() },
+    ...copyLinkItems(ctx.copyLink),
     { id: "track-info", label: t("menu.trackInfo"), icon: "info", run: () => ctx.trackInfo() },
   );
   return items;
@@ -242,6 +252,7 @@ export function queueMenuItems(ctx: GoToTargets & {
   favorite?: { active: boolean; toggle(): void };
   later?: LaterToggle;
   copyTitle(): void;
+  copyLink?: () => void;
   remove(): void;
 }): MenuItem[] {
   const items: MenuItem[] = [
@@ -272,6 +283,7 @@ export function queueMenuItems(ctx: GoToTargets & {
   items.push(...library, ...goToItems(ctx));
   items.push(
     { id: "copy-title", label: t("menu.copyTitle"), icon: "copy", divider: true, run: () => ctx.copyTitle() },
+    ...copyLinkItems(ctx.copyLink),
     { id: "remove", label: t("menu.remove"), icon: "trash-2", danger: true, divider: true, run: () => ctx.remove() },
   );
   return items;

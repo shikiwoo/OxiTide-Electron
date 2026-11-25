@@ -4,6 +4,7 @@
   import { fade, type TransitionConfig } from "svelte/transition";
   import { api, trackToQueueItem, type QueueItem } from "../api";
   import { copyText } from "../clipboard";
+  import { copyShareLink } from "../share";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import Icon from "./Icon.svelte";
   import Cover from "./Cover.svelte";
@@ -72,6 +73,7 @@
       favorite: favs ? { active: favs.hasTrack(id), toggle: () => void favs.toggleTrack(id) } : undefined,
       later: { active: later.has("track", id), toggle: () => void later.toggle("track", id) },
       copyTitle: () => void copyText(item.title),
+      copyLink: () => void copyShareLink("track", id, toasts),
       remove: () => player.remove(index),
       ...(go ? goToTargets(item, go, api.getTrack) : {}),
     });

@@ -8,6 +8,7 @@
   } from "../albumVolumes";
   import { api, trackToQueueItem } from "../api";
   import { copyText } from "../clipboard";
+  import { copyShareLink } from "../share";
   import { errorMessage } from "../errors";
   import { formatDuration, formatReleaseDate } from "../format";
   import { locatePlaying } from "../locatePlaying.svelte";
@@ -825,6 +826,7 @@
                 addToQueue: () => queueOne(t),
                 addToPlaylist: () => onAddToPlaylist?.(t),
                 copyTitle: () => void copyText(t.title),
+                copyLink: () => void copyShareLink("track", t.id, toasts),
                 trackInfo: () => trackInfo.open(t),
                 goToAlbum: openAlbum,
                 goToArtists: nav

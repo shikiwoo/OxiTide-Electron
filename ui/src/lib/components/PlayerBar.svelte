@@ -9,6 +9,7 @@
   import { later } from "../later.svelte";
   import { nowPlayingMenuItems } from "../menus";
   import { copyText } from "../clipboard";
+  import { copyShareLink } from "../share";
   import { errorMessage } from "../errors";
   import { trackInfo } from "../trackInfo.svelte";
   import type { Toasts } from "../toasts.svelte";
@@ -157,6 +158,7 @@
       addToPlaylist: picker ? () => void withTrack(item, (track) => picker.openPicker([track])) : undefined,
       later: { active: later.has("track", item.track_id), toggle: () => void later.toggle("track", item.track_id) },
       copyTitle: () => void copyText(item.title),
+      copyLink: () => void copyShareLink("track", item.track_id, toasts),
       trackInfo: () => void withTrack(item, (track) => trackInfo.open(track)),
       ...goToTargets(item, go, api.getTrack),
     });
@@ -418,6 +420,16 @@
           title={t(fav ? "player.unfavorite" : "player.favorite")}
         >
           <FavoriteHeart fx={heartFx} />
+        </button>
+
+        <button
+          class="ibtn share"
+          data-floor
+          onclick={() => void copyShareLink("track", current.track_id, toasts)}
+          aria-label={t("detail.share")}
+          title={t("menu.copyLink")}
+        >
+          <Icon name="share-2" size={18} />
         </button>
 
         <span class="muted tnum time">{formatDuration(position / 1000)} / {formatDuration(duration / 1000)}</span>
@@ -959,6 +971,10 @@
   }
   @container bar (width < 1040px) {
     .time { display: none; }
+  }
+  /* The link stays in the title's right-click menu. */
+  @container bar (width < 960px) {
+    .share { display: none; }
   }
   @container bar (width < 900px) {
     .row { gap: 8px; padding: 0 12px; }

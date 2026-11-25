@@ -7,6 +7,7 @@ import {
   historyMenuItems,
   laterItems,
   libraryPlaylistMenuItems,
+  nowPlayingMenuItems,
   queueMenuItems,
   selectionMenuItems,
   trackMenuItems,
@@ -103,6 +104,15 @@ describe("trackMenuItems", () => {
       "copy-title",
       "track-info",
     ]);
+  });
+
+  it("offers Copy link after Copy title when the surface passes one", () => {
+    const copyLink = vi.fn();
+    const items = trackMenuItems(baseCtx({ copyLink }));
+    const ids = items.map((i) => i.id);
+    expect(ids.indexOf("copy-link")).toBe(ids.indexOf("copy-title") + 1);
+    items.find((i) => i.id === "copy-link")?.run();
+    expect(copyLink).toHaveBeenCalledOnce();
   });
 
   it("track info invokes its callback", () => {
@@ -467,5 +477,23 @@ describe("collectionPlaylistMenuItems", () => {
   it("never offers Collaborators on a playlist we do not own", () => {
     const items = collectionPlaylistMenuItems(ctx(false, vi.fn()));
     expect(items.map((item) => item.id)).toEqual(["open", "move", "later", "remove"]);
+  });
+});
+
+describe("Copy link on queue and now-playing menus", () => {
+  it("sits after Copy title in the queue menu", () => {
+    const items = queueMenuItems({ index: 0, playNow: vi.fn(), copyTitle: vi.fn(), copyLink: vi.fn(), remove: vi.fn() });
+    expect(items.map((i) => i.id)).toEqual(["play-now", "copy-title", "copy-link", "remove"]);
+  });
+
+  it("sits after Copy title in the now-playing menu", () => {
+    const ids = nowPlayingMenuItems({
+      favorited: false,
+      toggleFavorite: vi.fn(),
+      copyTitle: vi.fn(),
+      copyLink: vi.fn(),
+      trackInfo: vi.fn(),
+    }).map((i) => i.id);
+    expect(ids.slice(-3)).toEqual(["copy-title", "copy-link", "track-info"]);
   });
 });
