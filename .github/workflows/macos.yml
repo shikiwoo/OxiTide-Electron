@@ -6,9 +6,12 @@ name: macOS app
 # tauri.fork.conf.json points the updater at this repository.
 # Unsigned: on first launch macOS says the app is damaged; clear the
 # quarantine flag with `xattr -cr /Applications/OxiTide.app`.
-# Manual runs only; the .dmg is a workflow artifact.
+# Runs on pushes to the macos-port branch (a manual run needs the file on the
+# default branch) and by hand; the .dmg is a workflow artifact.
 
 on:
+  push:
+    branches: [macos-port]
   workflow_dispatch:
 
 permissions:
