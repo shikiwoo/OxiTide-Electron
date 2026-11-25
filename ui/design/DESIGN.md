@@ -83,21 +83,27 @@ so a list at rest, or at its end, shows every row whole. `--fade-clear` is botto
 rows scroll behind (the docked player bar): past its top edge they are hidden. The scrollbar
 strip (`--scrollbar-w`, the standard thin bar's 10px) is left out of the mask. Users:
 
-- Track tables (`TrackTable.svelte`), every one with a header: the full-page ones (`fill`:
-  Tracks, Album, Playlist, Mix, ArtistAll, Save for Later) and the capped ones (Artist's Top
-  tracks, the search results list). The header is a separate table above the scroller (both
-  `table-layout: fixed` over one `<colgroup>`, both reserving the scrollbar gutter), unmasked
-  and untinted. Fill tables clear the player bar; capped ones fade at their pane's edge.
-  Compact tables (search previews) have no header and no fade.
+- Capped track tables (`TrackTable.svelte`: Artist's Top tracks, the search results list).
+  The header is a separate table above the scroller (both `table-layout: fixed` over one
+  `<colgroup>`, both reserving the scrollbar gutter), unmasked and untinted; the rows fade at
+  their pane's edge. Compact tables (search previews) have no header and no fade.
 - The queue (`QueueRail.svelte`), in every host: under its header, and above the docked player
   bar (`--queue-clear`; 0 in the card, beside a floating bar, in Mini's sheet and in Rack).
-- History's tab body and ArtistAll's release/playlist/overview tabs: under the tabs, and
-  above the player bar (they clear it themselves: `.main` drops its padding for `.view-fill`).
 - The sidebar's scroll area: from the wordmark down, above the player bar (`--sidebar-clear`;
   0 when the bar floats over the main column only).
 
 Virtualized lists pass `content` (their row count) to re-measure; lists of changing sections
 pass `watchChildren`, which watches each direct child's size and children coming and going.
+
+**Track-list pages scroll whole** (2026-11-25). Tracks, Album, Playlist, Mix, Radio, ArtistAll,
+History and Save for Later (`.view-fill`) scroll as one page in `.main`: the page header,
+tools and rows move together, so a short window is never left with a sliver of list under a
+pinned header. Fill track tables (`fill`) do not scroll themselves: their rows grow with the
+list, virtualization follows `.main` (offset by where the rows start, `lib/pageScroll.ts`), and
+the column header stays in flow right above the first row and scrolls away with the page
+(never sticky: a header floating over the rows hid the ones scrolled under it). `.main` keeps its bottom
+padding as the player bar's clearance; it scroll-pads by the title bar strip and the bar so a
+focused row stays clear of both. No edge fade on these.
 
 **Track table tools.** Sort (SortBar's `.quiet` buttons) and Now playing (`.locate`) share
 one look: 30px, 12px/600 muted text on a soft `--surface-2` fill (55%); hover raises the fill

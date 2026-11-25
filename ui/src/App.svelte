@@ -450,8 +450,13 @@
     if (!perf.active) return;
     const bridge = {
       goto: (name: string) => nav.goto({ name } as never),
-      scrollTracks: (px: number) =>
-        document.querySelector<HTMLElement>("[data-perf-scroll]")?.scrollBy({ top: px }),
+      // A fill table's rows scroll with the page, so its own box does not
+      // scroll: scroll the page around it instead.
+      scrollTracks: (px: number) => {
+        const list = document.querySelector<HTMLElement>("[data-perf-scroll]");
+        const target = list && list.scrollHeight > list.clientHeight ? list : list?.closest<HTMLElement>(".main");
+        target?.scrollBy({ top: px });
+      },
       setFilter: (text: string) => {
         const input = document.querySelector<HTMLInputElement>("[data-perf-filter]");
         if (!input) return false;

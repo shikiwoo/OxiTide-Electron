@@ -12,7 +12,6 @@
   import ErrorState from "../lib/components/ErrorState.svelte";
   import Icon from "../lib/components/Icon.svelte";
   import Loading from "../lib/components/Loading.svelte";
-  import { edgeFade } from "../lib/edgeFade";
   import MediaCard from "../lib/components/MediaCard.svelte";
   import TrackTable from "../lib/components/TrackTable.svelte";
   import { routeForPageItem, type ArtistTab, type Nav } from "../lib/nav.svelte";
@@ -273,7 +272,7 @@
 {:else if activeAlbumKind}
   {@const kind = activeAlbumKind}
   {@const list = albumLists[kind]}
-  <div class="tab-body edge-fade" use:edgeFade={{ watchChildren: true }}>
+  <div class="tab-body">
     {#if albumErrors[kind]}
       <ErrorState message={albumErrors[kind]} onRetry={() => retryAlbums(kind)} />
     {:else if list === null}
@@ -294,7 +293,7 @@
     {/if}
   </div>
 {:else if tab === "playlists"}
-  <div class="tab-body edge-fade" use:edgeFade={{ watchChildren: true }}>
+  <div class="tab-body">
     {#if playlistsError}
       <ErrorState message={playlistsError} onRetry={retryPlaylists} />
     {:else if playlists === null}
@@ -316,7 +315,7 @@
     {/if}
   </div>
 {:else}
-  <div class="tab-body edge-fade" use:edgeFade={{ watchChildren: true }}>
+  <div class="tab-body">
     {#if artistError}
       <ErrorState message={artistError} onRetry={loadArtist} />
     {:else if artist === null}
@@ -397,16 +396,6 @@
     transition:
       left var(--dur-state) var(--ease-in-out),
       width var(--dur-state) var(--ease-in-out);
-  }
-  .tab-body {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    /* .main drops its bottom padding for .view-fill pages, so this scroller
-       clears the floating player bar itself (as History's does), and the
-       list edge fade (app.css) hides what passes behind the bar. */
-    padding-bottom: calc(var(--player-height) + 24px);
-    --fade-clear: calc(var(--player-height) + 8px);
   }
   .list-head {
     display: flex;

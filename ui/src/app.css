@@ -129,20 +129,13 @@ body.dragging [data-drop-refused] * {
   transition: transform var(--dur-state) var(--ease-enter);
 }
 .skip-link:focus { transform: none; }
-/* Track-list views: the wrapper owns the main area's height so the track
-   table (TrackTable's `fill` prop) grows into the leftover space. */
-.view-fill { display: flex; flex-direction: column; height: 100%; }
-/* Fill views scroll internally (TrackTable), so the main scroller must not
-   inset them from the floating bar; the list carries its own bottom
-   clearance instead. */
-/* `> .page:not(.covered)`: a page hidden under Now Playing must not reshape
-   .main around Now Playing. */
-.main:has(> .page:not(.covered) .view-fill) { padding-bottom: 0; }
+/* Track-list views: header, tools and track table stacked in one column.
+   The whole view scrolls with .main (TrackTable's `fill` rows follow the
+   page scroller), so the header scrolls away on short windows. */
+.view-fill { display: flex; flex-direction: column; }
 /* Route enter: the incoming page settles in (opacity + 8px rise) while the
-   outgoing one is replaced immediately, so there is no dual-layout crossfade.
-   `height: 100%` preserves the `.view-fill` height contract. */
+   outgoing one is replaced immediately, so there is no dual-layout crossfade. */
 .page {
-  height: 100%;
   /* `backwards` (not `both`): after the enter finishes the animation stops
      applying, so the page stops being a containing block for position:fixed
      children (modals must anchor to the viewport). */
@@ -175,12 +168,10 @@ body.dragging [data-drop-refused] * {
 .page.covered {
   display: none;
 }
-/* Scrolling pages size to their content so .main's bottom padding lands after
-   the last row; a 100%-tall page would consume that padding beneath its
-   overflowing content. Fill views keep the definite height their layouts
-   rely on. */
-.page:not(:has(.view-fill)) {
-  height: auto;
+/* Pages size to their content so .main's bottom padding (the player bar's
+   clearance) lands after the last row; a 100%-tall page would consume that
+   padding beneath its overflowing content. */
+.page {
   min-height: 100%;
 }
 @keyframes page-in {

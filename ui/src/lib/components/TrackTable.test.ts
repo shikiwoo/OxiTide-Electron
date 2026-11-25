@@ -212,6 +212,62 @@ describe("TrackTable semantics", () => {
     }
   });
 
+  it("scrolls a fill table's rows with the page scroller, header and all", async () => {
+    const items = Array.from({ length: 400 }, (_, i) => track(i + 1));
+    const view = {
+      filter: "", levels: [], engaged: false, preparing: false, error: "",
+      items, setFilter: vi.fn(), toggleSort: vi.fn(), clearSort: vi.fn(),
+      retry: vi.fn(), sourceIndex: (index: number) => index,
+    } as unknown as TrackView;
+    const favorites = { hasTrack: () => false, toggleTrack: vi.fn() } as unknown as Favorites;
+    const toasts = { show: vi.fn() } as unknown as Toasts;
+    const onEndReached = vi.fn();
+    // The page: a scroller (.main) whose header puts the rows 300px down.
+    const host = document.createElement("div");
+    host.className = "main";
+    host.style.overflowY = "auto";
+    document.body.appendChild(host);
+    Object.defineProperty(host, "clientHeight", { value: 500 });
+    Object.defineProperty(host, "scrollHeight", { value: 300 + 400 * 46 });
+    const scrollTo = vi.fn();
+    host.scrollTo = scrollTo;
+    try {
+      render(TrackTable, {
+        target: host,
+        props: { view, favorites, toasts, fill: true, onEndReached, playingTrackId: 300 },
+      });
+      const box = host.querySelector<HTMLElement>(".table-scroll")!;
+      expect(box.classList.contains("edge-fade")).toBe(false);
+      box.getBoundingClientRect = () => ({ top: 300 - host.scrollTop }) as DOMRect;
+      const indexes = () =>
+        [...host.querySelectorAll<HTMLElement>("tr.row")].map((row) => Number(row.dataset.rowIndex));
+
+      // At the top the page header is in view: the first rows render.
+      expect(indexes()[0]).toBe(0);
+
+      // 200 rows past the rows' top: the window follows the page.
+      host.scrollTop = 300 + 200 * 46;
+      await fireEvent.scroll(host);
+      expect(indexes()).toContain(200);
+      expect(indexes()).not.toContain(0);
+      expect(onEndReached).not.toHaveBeenCalled();
+
+      // Near the page's end: the next page is asked for.
+      host.scrollTop = 300 + 400 * 46 - 500 - 100;
+      await fireEvent.scroll(host);
+      expect(onEndReached).toHaveBeenCalled();
+
+      // "Now playing" scrolls the page, counting the header above the rows.
+      await fireEvent.click(host.querySelector<HTMLButtonElement>("button.locate")!);
+      expect(scrollTo).toHaveBeenCalledTimes(1);
+      const top = scrollTo.mock.calls[0][0].top as number;
+      expect(top).toBeGreaterThan(300 + 299 * 46 - 500);
+      expect(top).toBeLessThan(300 + 299 * 46);
+    } finally {
+      host.remove();
+    }
+  });
+
   it("labels virtualized rows with their index in the full list", () => {
     setup();
     const rows = document.querySelectorAll<HTMLTableRowElement>("tbody tr.row");

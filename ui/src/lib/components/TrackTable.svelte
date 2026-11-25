@@ -22,6 +22,7 @@
   import type { Toasts } from "../toasts.svelte";
   import { windowRange } from "../virtual";
   import { edgeFade } from "../edgeFade";
+  import { offsetWithin, scrollParent, scrolledPast } from "../pageScroll";
   import { appearance } from "../appearance.svelte";
   import { trackFlags } from "../trackFlags.svelte";
   import { trackInfo } from "../trackInfo.svelte";
@@ -94,8 +95,9 @@
       onDrop?(from: number, to: number): void;
     };
     maxHeight?: string;
-    /// Grow to fill the parent's leftover height (parent is a .view-fill flex
-    /// column) instead of capping at maxHeight.
+    /// Track-list pages: the rows scroll with the page (the nearest scrolling
+    /// ancestor, `.main`) instead of in their own box, uncapped, so the page
+    /// header scrolls away with them; the column header sticks to the top.
     fill?: boolean;
     /// The album-name column is redundant in single-album view (spec §7.3).
     showAlbum?: boolean;
@@ -192,8 +194,13 @@
   const OVERSCAN = 8;
   const END_THRESHOLD = 400;
 
+  /// How far the rows are scrolled (from the first row's top) and how tall
+  /// the visible area is. A capped table reads its own box; a fill table
+  /// reads the page scroller, measured from where its rows start on it.
   let scrollTop = $state(0);
-  let viewport = $state(0);
+  let ownHeight = $state(0);
+  let pageHeight = $state(0);
+  const viewport = $derived(fill ? pageHeight : ownHeight);
 
   const rows = $derived(view.items);
   const grouping = $derived(sections !== undefined && !view.engaged ? sections : null);
@@ -323,6 +330,8 @@
     return new Set(payload.tracks);
   });
 
+  /// In fill mode the rows' box does not scroll (its scrollTop stays 0 and
+  /// its rect moves with the page), so this holds in both modes.
   function slotAt(clientY: number): number {
     const scroll = scrollEl;
     if (!scroll) return 0;
@@ -353,7 +362,7 @@
       const to = normalizeDrop(from, slotAt(point.y));
       if (to !== from) playlistActions?.onDrop?.(from, to);
     },
-    scroller: () => scrollEl,
+    scroller: () => scroller,
   });
 
   function onRowClick(event: MouseEvent, track: Track) {
@@ -476,7 +485,43 @@
   }
 
   let focusedIndex = $state<number | null>(null);
+  /// The rows' box: the scroller of a capped table; in fill mode it grows
+  /// with its rows and the page scrolls it.
   let scrollEl = $state<HTMLDivElement | null>(null);
+  let pageScroller = $state<HTMLElement | null>(null);
+  /// What scrolls the rows.
+  const scroller = $derived(fill ? pageScroller : scrollEl);
+
+  /// Fill mode follows the page scroller: its scroll and size, and the rows'
+  /// own size (the page header above them can grow or shrink too).
+  $effect(() => {
+    const rowsBox = scrollEl;
+    if (!fill || !rowsBox) return;
+    const host = scrollParent(rowsBox);
+    pageScroller = host;
+    if (!host) return;
+    const sync = () => {
+      scrollTop = scrolledPast(host, rowsBox);
+      pageHeight = host.clientHeight;
+      if (host.scrollHeight - host.scrollTop - host.clientHeight < END_THRESHOLD) onEndReached?.();
+    };
+    host.addEventListener("scroll", sync, { passive: true });
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(sync);
+    resize?.observe(host);
+    resize?.observe(rowsBox);
+    untrack(sync);
+    return () => {
+      host.removeEventListener("scroll", sync);
+      resize?.disconnect();
+      pageScroller = null;
+    };
+  });
+
+  /// Where the rows start in the scroller's content (0 for a capped table,
+  /// whose rows start at its own top).
+  function rowsOffset(): number {
+    return fill && pageScroller && scrollEl ? offsetWithin(pageScroller, scrollEl) : 0;
+  }
 
   /// Single tab stop: the focused row, else the first row in the viewport.
   /// Both are clamped so a shrinking/filtered list never points past its end.
@@ -495,13 +540,14 @@
   async function focusRow(index: number) {
     const target = Math.min(Math.max(0, index), Math.max(0, rows.length - 1));
     focusedIndex = target;
-    const scroll = scrollEl;
+    const scroll = scroller;
     if (scroll && (target < range.first || target >= range.last)) {
-      scroll.scrollTop = Math.max(0, target * rowHeight - scroll.clientHeight / 2);
-      scrollTop = scroll.scrollTop;
+      const offset = rowsOffset();
+      scroll.scrollTop = Math.max(0, offset + target * rowHeight - scroll.clientHeight / 2);
+      scrollTop = Math.max(0, scroll.scrollTop - offset);
     }
     await tick();
-    scroll?.querySelector<HTMLElement>(`tr[data-row-index="${target}"]`)?.focus();
+    scrollEl?.querySelector<HTMLElement>(`tr[data-row-index="${target}"]`)?.focus();
   }
 
   /// The playing track's position in the visible rows; -1 when it isn't
@@ -510,24 +556,25 @@
     playingTrackId === null ? -1 : rows.findIndex((t) => t.id === playingTrackId),
   );
 
-  /// Scroll the playing row to the middle of the visible rows (between the
-  /// header and, in fill mode, the player bar clearance). Flat rows sit at
-  /// `index * rowHeight` below the header (virtualized, so the row may not be
-  /// mounted yet); grouped rows render whole and are measured.
+  /// Scroll the playing row to the middle of the visible rows (above the
+  /// player bar clearance). Flat rows sit at `index * rowHeight` below the
+  /// rows' top (virtualized, so the row may not be mounted yet); grouped rows
+  /// render whole and are measured.
   function scrollToPlaying() {
-    const scroll = scrollEl;
+    const scroll = scroller;
+    const rowsBox = scrollEl;
     const index = playingIndex;
-    if (!scroll || index < 0) return;
+    if (!scroll || !rowsBox || index < 0) return;
     let rowTop = index * rowHeight;
     if (grouping) {
-      const row = scroll.querySelector<HTMLElement>(`tr[data-row-index="${index}"]`);
+      const row = rowsBox.querySelector<HTMLElement>(`tr[data-row-index="${index}"]`);
       if (!row) return;
-      rowTop = row.getBoundingClientRect().top - scroll.getBoundingClientRect().top + scroll.scrollTop;
+      rowTop = row.getBoundingClientRect().top - rowsBox.getBoundingClientRect().top + rowsBox.scrollTop;
     }
     const clearance = parseFloat(getComputedStyle(scroll).paddingBottom) || 0;
     const middle = (viewport - clearance - rowHeight) / 2;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    scroll.scrollTo({ top: Math.max(0, rowTop - middle), behavior: reduce ? "auto" : "smooth" });
+    scroll.scrollTo({ top: Math.max(0, rowsOffset() + rowTop - middle), behavior: reduce ? "auto" : "smooth" });
   }
 
   /// Double-clicking "Now playing" follows the playing track: every time it
@@ -716,12 +763,12 @@
   class="table-scroll"
   class:pane={!split}
   class:pane-flush={!split}
-  class:edge-fade={split}
+  class:edge-fade={split && !fill}
   class:compact
   class:fill
   bind:this={scrollEl}
   style:max-height={fill ? "none" : maxHeight}
-  bind:clientHeight={viewport}
+  bind:clientHeight={ownHeight}
   onscroll={onScroll}
   data-perf-scroll
   use:edgeFade={{ content: rows.length }}
@@ -1014,27 +1061,19 @@
       display: none;
     }
   }
-  /* fill mode: own the .view-fill parent's leftover height and scroll
-     internally; keep a floor so a tall header can't collapse it to zero. */
+  /* Fill mode: the rows scroll with the page (`.main`), so their box grows
+     with them instead of scrolling; the page's bottom padding clears the
+     floating player bar. */
   .table-scroll.fill {
-    flex: 1 1 auto;
-    min-height: 140px;
-    /* Rows scroll behind the floating player bar; the clearance lets the last
-       row rise clear of it. */
-    padding-bottom: calc(var(--player-height) + 8px);
+    overflow: visible;
   }
   /* Split mode: the frame is the pane and the width container (the header
      table sits outside the scroller but drops the same optional columns);
-     the scroller takes what the header leaves (in fill mode, of the page's
-     leftover height; otherwise up to maxHeight). */
+     the scroller takes what the header leaves, up to maxHeight. */
   .table-frame {
     display: flex;
     flex-direction: column;
     container-type: inline-size;
-  }
-  .table-frame.fill {
-    flex: 1 1 auto;
-    min-height: 140px;
   }
   .table-frame .table-scroll {
     container-type: normal;
@@ -1050,6 +1089,19 @@
     flex: none;
     overflow: hidden;
   }
+  /* Fill mode: nothing scrolls inside the frame, so neither part needs the
+     gutter. The column header stays in flow right above the first row and
+     scrolls away with the page; it never floats over rows. */
+  .table-frame.fill .table-head,
+  .table-frame.fill .table-scroll {
+    scrollbar-gutter: auto;
+  }
+  /* Keyboard focus and other scroll-into-view moves keep a row clear of the
+     title bar strip and the floating player bar. */
+  :global(.main:has(.table-frame.fill)) {
+    scroll-padding-top: calc(var(--titlebar-h) + 8px);
+    scroll-padding-bottom: calc(var(--player-height) + 8px);
+  }
   .table-frame table {
     table-layout: fixed;
   }
@@ -1060,11 +1112,6 @@
   .table-frame thead th {
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-  /* The edge fade (app.css `.edge-fade`): in fill mode the rows scroll
-     behind the floating player bar, hidden past its top edge. */
-  .table-frame .table-scroll.fill {
-    --fade-clear: calc(var(--player-height) + 8px);
   }
   /* Fixed-layout columns. The number, cover and actions are sized from
      their content (digit and button counts from the script); the shares

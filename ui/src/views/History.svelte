@@ -18,7 +18,6 @@
   import ErrorState from "../lib/components/ErrorState.svelte";
   import HistoryStats from "../lib/components/HistoryStats.svelte";
   import Loading from "../lib/components/Loading.svelte";
-  import { edgeFade } from "../lib/edgeFade";
   import { t, type MessageKey } from "../lib/i18n.svelte";
 
   let {
@@ -133,7 +132,7 @@
   </nav>
 
   {#if tab === "recent"}
-    <div class="tab-body edge-fade" use:edgeFade={{ watchChildren: true }}>
+    <div class="tab-body">
       {#if recentError}
         <ErrorState message={recentError} onRetry={() => void loadRecent(true)} />
       {:else if recentLoading && entries.length === 0}
@@ -184,7 +183,7 @@
       {/if}
     </div>
   {:else}
-    <div class="tab-body edge-fade" use:edgeFade={{ watchChildren: true }}>
+    <div class="tab-body">
       {#if statsError}
         <ErrorState message={statsError} onRetry={() => void loadStats()} />
       {:else if !stats}
@@ -233,14 +232,9 @@
      Rack's display narrow it) decides when the album column goes. */
   .tab-body {
     container: history / inline-size;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    /* .main drops its bottom padding for .view-fill pages, so this scroller
-       clears the floating player bar itself (as TrackTable's fill mode does). */
-    padding: 8px 4px calc(var(--player-height) + 24px) 0;
-    /* The list edge fade (app.css): hidden past the player bar's top edge. */
-    --fade-clear: calc(var(--player-height) + 8px);
+    /* Scrolls with the page (.main), whose bottom padding clears the
+       floating player bar. */
+    padding: 8px 4px 0 0;
   }
   .dayhead {
     display: flex;
