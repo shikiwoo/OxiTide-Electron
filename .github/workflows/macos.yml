@@ -8,11 +8,18 @@ name: macOS app
 # quarantine flag with `xattr -cr /Applications/OxiTide.app`.
 # Runs on pushes to the macos-port branch (a manual run needs the file on the
 # default branch) and by hand; the .dmg is a workflow artifact.
+# Tests only (no .dmg, ~10 min instead of ~30): put `[tests only]` in the
+# pushed commit's message, or tick tests_only on a manual run.
 
 on:
   push:
     branches: [macos-port]
   workflow_dispatch:
+    inputs:
+      tests_only:
+        description: Skip the .dmg build; run clippy and the tests only
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -27,6 +34,8 @@ env:
 jobs:
   dmg:
     runs-on: macos-latest
+    env:
+      TESTS_ONLY: ${{ inputs.tests_only || contains(github.event.head_commit.message, '[tests only]') }}
     steps:
       - uses: actions/checkout@v5
 
@@ -55,9 +64,11 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Build the app
+        if: env.TESTS_ONLY != 'true'
         run: npm --prefix ui run app:build -- --config crates/oxitide-app/tauri.fork.conf.json --target universal-apple-darwin --bundles app,dmg
 
       - uses: actions/upload-artifact@v7
+        if: env.TESTS_ONLY != 'true'
         with:
           name: OxiTide-macos-dmg
           path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
