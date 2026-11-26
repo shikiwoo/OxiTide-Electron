@@ -579,7 +579,10 @@ mod tests {
         assert!(out[0] > 0.9, "the ramp starts at the old gain");
         assert_eq!(out[0], out[1], "both channels of a frame share a gain");
         assert!(out[1440] > 0.0 && out[1440] < out[0], "mid-ramp is between");
-        assert!(out[3999].abs() < 1e-6, "settled at the new gain after the ramp");
+        assert!(
+            out[3999].abs() < 1e-6,
+            "settled at the new gain after the ramp"
+        );
     }
 
     #[test]

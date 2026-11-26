@@ -493,7 +493,7 @@ mod tests {
         assert!(speakers.caps.as_ref().unwrap().exclusive);
         let dac = &list.devices[1];
         assert_eq!(dac.name, "Living room DAC");
-        assert_eq!(dac.prefs.mode, OutputMode::Exclusive);
+        assert_eq!(dac.prefs.mode, crate::config::SAVED_EXCLUSIVE_PLAYS_AS);
         assert_eq!(list.devices[2].name, "gone-tv", "no saved name: the id");
     }
 

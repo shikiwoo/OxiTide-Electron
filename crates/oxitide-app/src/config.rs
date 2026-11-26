@@ -197,7 +197,18 @@ impl AudioConfig {
             .map(|prefs| prefs.mode)
             .unwrap_or_default()
     }
+}
 
+/// What `mode_for` gives a non-ASIO device saved as exclusive: macOS plays
+/// shared only, so tests that check the saved choice expect this.
+#[cfg(test)]
+pub(crate) const SAVED_EXCLUSIVE_PLAYS_AS: OutputMode = if cfg!(target_os = "macos") {
+    OutputMode::Shared
+} else {
+    OutputMode::Exclusive
+};
+
+impl AudioConfig {
     /// Drop entries that hold no choice and belong to no selected or pinned
     /// device.
     pub fn prune_devices(&mut self) {
@@ -1142,7 +1153,8 @@ duration_ms = 4000
         )
         .unwrap();
         let config = Config::load_from(&path);
-        assert_eq!(config.audio.mode_for("dac"), OutputMode::Exclusive);
+        assert_eq!(config.audio.devices["dac"].mode, OutputMode::Exclusive);
+        assert_eq!(config.audio.mode_for("dac"), SAVED_EXCLUSIVE_PLAYS_AS);
         assert_eq!(config.audio.mode_for("speakers"), OutputMode::Shared);
         assert_eq!(
             config.audio.mode_for("asio:Focusrite"),
@@ -1155,10 +1167,9 @@ duration_ms = 4000
             !text.contains("exclusive = true"),
             "the old switch is not written back:\n{text}"
         );
-        assert_eq!(
-            Config::load_from(&path).audio.mode_for("dac"),
-            OutputMode::Exclusive
-        );
+        let reloaded = Config::load_from(&path);
+        assert_eq!(reloaded.audio.devices["dac"].mode, OutputMode::Exclusive);
+        assert_eq!(reloaded.audio.mode_for("dac"), SAVED_EXCLUSIVE_PLAYS_AS);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1242,7 +1253,8 @@ duration_ms = 4000
         fs::write(&path, "[audio]\nexclusive = true\n").unwrap();
         let config = Config::load_from(&path);
         assert!(!config.audio.exclusive, "migrated onto System default");
-        assert_eq!(config.audio.mode_for(""), OutputMode::Exclusive);
+        assert_eq!(config.audio.devices[""].mode, OutputMode::Exclusive);
+        assert_eq!(config.audio.mode_for(""), SAVED_EXCLUSIVE_PLAYS_AS);
         assert!(config.ui.device_icons);
         assert_eq!(config.audio.output_device, "");
         assert_eq!(config.audio.exclusive_fallback, ExclusiveFallback::Shared);
