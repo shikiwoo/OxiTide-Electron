@@ -63,7 +63,30 @@ jobs:
           path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: error
 
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
       # After the upload, so a test that assumes Linux or Windows doesn't
-      # block getting the .dmg.
+      # block getting the .dmg. Same as ci.yml: nextest's `ci` profile runs
+      # each test in its own process, retries a failure twice and reports
+      # every failure; a test that passes only on a retry is flagged FLAKY
+      # (a warning on the run) and still needs a fix. The shared macOS
+      # runners are slow enough to lose the engine tests' timing races.
       - name: Tests
-        run: cargo test --workspace
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo nextest run --workspace --profile ci 2>&1 | tee nextest.log
+          flaky=$(sed 's/\x1b\[[0-9;]*m//g' nextest.log | grep -E '^\s*FLAKY ' | sed -E 's/^\s+//' | sort -u || true)
+          if [ -n "$flaky" ]; then
+            echo "### Flaky tests (passed on a retry)" >> "$GITHUB_STEP_SUMMARY"
+            while IFS= read -r line; do
+              echo "::warning title=Flaky test::$line"
+              echo "- \`$line\`" >> "$GITHUB_STEP_SUMMARY"
+            done <<< "$flaky"
+          fi
+
+      # nextest does not run doctests.
+      - name: Doctests
+        run: cargo test --workspace --doc
