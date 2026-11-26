@@ -902,6 +902,7 @@
       {playlistActions}
       actions={collectionActions}
       playing={player.state.playing}
+      titlebar={customChrome}
     />
     <main class="main" id="main" tabindex="-1">
       {#if error}<p style="color:var(--danger)">{error}</p>{/if}
