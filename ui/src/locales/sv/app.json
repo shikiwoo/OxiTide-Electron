@@ -459,6 +459,7 @@
   "common.optional": "Valfritt",
   "common.trackCount": "{count, plural, one {# låt} other {# låtar}}",
   "common.undo": "Ångra",
+  "window.title": "OxiTide",
   "window.controls": "Fönsterkontroller",
   "window.minimize": "Minimera",
   "window.maximize": "Maximera",

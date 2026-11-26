@@ -1099,9 +1099,10 @@
     scrollbar-gutter: auto;
   }
   /* Keyboard focus and other scroll-into-view moves keep a row clear of the
-     title bar strip and the floating player bar. */
+     page's top edge (the title bar sits above .main, not over it) and the
+     floating player bar. */
   :global(.main:has(.table-frame.fill)) {
-    scroll-padding-top: calc(var(--titlebar-h) + 8px);
+    scroll-padding-top: 8px;
     scroll-padding-bottom: calc(var(--player-height) + 8px);
   }
   .table-frame table {

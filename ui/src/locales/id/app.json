@@ -459,6 +459,7 @@
   "common.optional": "Opsional",
   "common.trackCount": "{count, plural, other {# lagu}}",
   "common.undo": "Urungkan",
+  "window.title": "OxiTide",
   "window.controls": "Kontrol jendela",
   "window.minimize": "Minimalkan",
   "window.maximize": "Maksimalkan",

@@ -459,6 +459,7 @@
   "common.optional": "Valgfrit",
   "common.trackCount": "{count, plural, one {# nummer} other {# numre}}",
   "common.undo": "Fortryd",
+  "window.title": "OxiTide",
   "window.controls": "Vinduesknapper",
   "window.minimize": "Minimer",
   "window.maximize": "Maksimer",

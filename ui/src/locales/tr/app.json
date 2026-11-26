@@ -459,6 +459,7 @@
   "common.optional": "İsteğe bağlı",
   "common.trackCount": "{count, plural, one {# parça} other {# parça}}",
   "common.undo": "Geri al",
+  "window.title": "OxiTide",
   "window.controls": "Pencere denetimleri",
   "window.minimize": "Simge durumuna küçült",
   "window.maximize": "Ekranı kapla",

@@ -459,6 +459,7 @@
   "common.optional": "Opțional",
   "common.trackCount": "{count, plural, one {# piesă} few {# piese} other {# de piese}}",
   "common.undo": "Anulează",
+  "window.title": "OxiTide",
   "window.controls": "Controale fereastră",
   "window.minimize": "Minimizează",
   "window.maximize": "Maximizează",

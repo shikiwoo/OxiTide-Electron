@@ -459,6 +459,7 @@
   "common.optional": "Facoltativo",
   "common.trackCount": "{count, plural, one {# brano} many {# brani} other {# brani}}",
   "common.undo": "Annulla",
+  "window.title": "OxiTide",
   "window.controls": "Controlli della finestra",
   "window.minimize": "Riduci a icona",
   "window.maximize": "Ingrandisci",

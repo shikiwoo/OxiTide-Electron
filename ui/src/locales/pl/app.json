@@ -459,6 +459,7 @@
   "common.optional": "Opcjonalnie",
   "common.trackCount": "{count, plural, one {# utwór} few {# utwory} many {# utworów} other {# utworu}}",
   "common.undo": "Cofnij",
+  "window.title": "OxiTide",
   "window.controls": "Sterowanie oknem",
   "window.minimize": "Minimalizuj",
   "window.maximize": "Maksymalizuj",

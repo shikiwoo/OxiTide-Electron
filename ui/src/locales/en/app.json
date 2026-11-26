@@ -465,6 +465,7 @@
   "common.trackCount": "{count, plural, one {# track} other {# tracks}}",
   "common.undo": "Undo",
 
+  "window.title": "OxiTide",
   "window.controls": "Window controls",
   "window.minimize": "Minimize",
   "window.maximize": "Maximize",

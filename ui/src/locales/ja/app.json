@@ -459,6 +459,7 @@
   "common.optional": "任意",
   "common.trackCount": "{count, plural, other {#曲}}",
   "common.undo": "元に戻す",
+  "window.title": "OxiTide",
   "window.controls": "ウィンドウの操作",
   "window.minimize": "最小化",
   "window.maximize": "最大化",

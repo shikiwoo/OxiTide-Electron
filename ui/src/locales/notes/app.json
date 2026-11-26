@@ -465,6 +465,7 @@
   "common.trackCount": "A number of tracks, e.g. a playlist's length.",
   "common.undo": "Button on a notification that reverses what was just done.",
 
+  "window.title": "Window title bar text (Windows): the app's name. Usually left untranslated.",
   "window.controls": "Accessible name of the minimize/maximize/close button group.",
   "window.minimize": "Window button.",
   "window.maximize": "Window button.",

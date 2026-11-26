@@ -459,6 +459,7 @@
   "common.optional": "可选",
   "common.trackCount": "{count, plural, other {# 首曲目}}",
   "common.undo": "撤销",
+  "window.title": "OxiTide",
   "window.controls": "窗口控制",
   "window.minimize": "最小化",
   "window.maximize": "最大化",

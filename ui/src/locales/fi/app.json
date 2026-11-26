@@ -459,6 +459,7 @@
   "common.optional": "Valinnainen",
   "common.trackCount": "{count, plural, one {# kappale} other {# kappaletta}}",
   "common.undo": "Kumoa",
+  "window.title": "OxiTide",
   "window.controls": "Ikkunan ohjaimet",
   "window.minimize": "Pienennä",
   "window.maximize": "Suurenna",
