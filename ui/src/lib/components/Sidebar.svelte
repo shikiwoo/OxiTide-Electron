@@ -828,6 +828,31 @@
   .rail .top:has(.collapse:hover, .collapse:focus-visible) .wordmark {
     opacity: 0;
   }
+  /* Custom window chrome (Windows): the persistent title bar (TitleBar.svelte)
+     already shows the mark and name, so the wordmark leaves the view but stays
+     the sidebar's heading for screen readers. The collapse button holds the
+     top row on its own, and on the rail it is always shown in the mark's
+     place instead of only on hover. */
+  :global(:root[data-chrome="custom"]) .wordmark {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  :global(:root[data-chrome="custom"]) .top-actions {
+    margin-left: auto;
+  }
+  :global(:root[data-chrome="custom"]) .rail .top-actions {
+    margin-left: 0;
+  }
+  :global(:root[data-chrome="custom"]) .rail .collapse {
+    position: static;
+    width: 40px;
+    height: 28px;
+    opacity: 1;
+  }
   .rail .tree :global(.row) {
     justify-content: center;
   }
