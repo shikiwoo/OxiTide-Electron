@@ -5278,7 +5278,9 @@ mod tests {
     #[test]
     fn level_tap_measures_written_audio_only_while_enabled() {
         let (plan, files) = fixture_plan();
-        let (engine, output) = engine_with(plan, files);
+        // Paced: unpaced, the track can end before the tap is enabled, and
+        // then there is no audio left for it to see (macOS CI, 2026-11-26).
+        let (engine, output) = paced_engine_with(plan, files);
         let tap = engine.level_tap();
         engine
             .handle(EngineCmd::PlayTracks {
@@ -5320,7 +5322,10 @@ mod tests {
     #[test]
     fn skip_on_the_open_device_fades_out_the_old_track() {
         let (plan, files) = fixture_plan();
-        let (engine, output) = engine_with(plan, files);
+        // Paced: unpaced, track 1 can end (and track 2 start, or end too)
+        // before Next arrives, so there is nothing to skip (macOS CI,
+        // 2026-11-26).
+        let (engine, output) = paced_engine_with(plan, files);
         engine
             .handle(EngineCmd::PlayTracks {
                 items: vec![item(1), item(2)],
@@ -9666,13 +9671,18 @@ mod tests {
         let mut plan = cached_plan("mem://tone", HASH);
         plan.sample_rate = tone_plan.sample_rate;
         let output = NullOutput::new();
+        // Paced: unpaced, the track can end, and its protection lapse, before
+        // the first check (macOS CI, 2026-11-26).
         let engine = Engine::new(
             Arc::new(FakeResolver { plan }),
             {
                 let files = files.clone();
                 move || Arc::new(crate::fetch::MapFetcher { files }) as Arc<dyn Fetcher>
             },
-            Box::new(output.clone()),
+            Box::new(PacedOutput {
+                inner: output.clone(),
+                per_frame: ABOUT_REAL_TIME,
+            }),
             Quality::Lossless,
             cache.clone(),
             true,
@@ -10419,6 +10429,9 @@ mod tests {
         }
         fn flush(&mut self) -> Result<()> {
             self.inner.flush()
+        }
+        fn fade_out(&mut self) -> Result<()> {
+            self.inner.fade_out()
         }
         fn stop(&mut self) -> Result<()> {
             self.inner.stop()
