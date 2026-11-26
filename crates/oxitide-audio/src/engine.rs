@@ -10149,8 +10149,14 @@ mod tests {
                 start: 0,
             })
             .unwrap();
-        wait_for(|| engine.state().position_ms >= 100);
-        // ~33 writes of ~26 ms of audio each: the fade runs well past 0.5 s.
+        // The fade is 2 s of wall time, and each write is ~26 ms of audio after
+        // a 60 ms sleep: ~870 ms of audio at most, but far less where sleeps
+        // run long (GitHub's macOS VMs played ~340 ms). Starting it at 350 ms
+        // needs only ~8 writes to pass the 0.5 s hand-off, and at most ends
+        // near 1.25 s, short of the track's natural end at 2 s.
+        wait_for(|| engine.state().position_ms >= 350);
+        let fade_from = engine.state().position_ms;
+        assert!(fade_from < 450, "the fade starts before the hand-off");
         engine
             .handle(EngineCmd::FadeAndPause { duration_ms: 2000 })
             .unwrap();
@@ -10163,8 +10169,8 @@ mod tests {
             "the fade crossed into track 2"
         );
         assert!(
-            state.position_ms > 600,
-            "paused before the would-be hand-off: {}",
+            state.position_ms > 550,
+            "paused before the would-be hand-off (fade from {fade_from} ms): {}",
             state.position_ms
         );
     }
