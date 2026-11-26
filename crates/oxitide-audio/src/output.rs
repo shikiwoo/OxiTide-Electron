@@ -572,7 +572,12 @@ pub fn enumerate_output_devices() -> Result<Vec<OutputDevice>> {
     crate::alsa_output::enumerate()
 }
 
-#[cfg(not(any(windows, target_os = "linux")))]
+#[cfg(target_os = "macos")]
+pub fn enumerate_output_devices() -> Result<Vec<OutputDevice>> {
+    crate::coreaudio_output::enumerate()
+}
+
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 pub fn enumerate_output_devices() -> Result<Vec<OutputDevice>> {
     Ok(Vec::new())
 }

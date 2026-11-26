@@ -1,0 +1,103 @@
+name: macOS app
+
+# Fork-only macOS port: builds the regular Tauri shell (WKWebView scrolls
+# fine, so the Electron shell isn't needed) as a universal .dmg (Apple
+# Silicon + Intel). tauri.macos.conf.json is merged in automatically;
+# tauri.fork.conf.json points the updater at this repository.
+# Unsigned: on first launch macOS says the app is damaged; clear the
+# quarantine flag with `xattr -cr /Applications/OxiTide.app`.
+# Runs on pushes to the macos-port branch (a manual run needs the file on the
+# default branch) and by hand; the .dmg is a workflow artifact.
+# Tests only (no .dmg, ~10 min instead of ~30): put `[tests only]` in the
+# pushed commit's message, or tick tests_only on a manual run.
+
+on:
+  push:
+    branches: [macos-port]
+  workflow_dispatch:
+    inputs:
+      tests_only:
+        description: Skip the .dmg build; run clippy and the tests only
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  dmg:
+    runs-on: macos-latest
+    env:
+      TESTS_ONLY: ${{ inputs.tests_only || contains(github.event.head_commit.message, '[tests only]') }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Read the pinned toolchain
+        id: rust
+        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)".*/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust.outputs.channel }}
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI dependencies
+        run: npm --prefix ui ci
+
+      - name: Clippy (macOS code paths)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build the app
+        if: env.TESTS_ONLY != 'true'
+        run: npm --prefix ui run app:build -- --config crates/oxitide-app/tauri.fork.conf.json --target universal-apple-darwin --bundles app,dmg
+
+      - uses: actions/upload-artifact@v7
+        if: env.TESTS_ONLY != 'true'
+        with:
+          name: OxiTide-macos-dmg
+          path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      # After the upload, so a test that assumes Linux or Windows doesn't
+      # block getting the .dmg. Same as ci.yml: nextest's `ci` profile runs
+      # each test in its own process, retries a failure twice and reports
+      # every failure; a test that passes only on a retry is flagged FLAKY
+      # (a warning on the run) and still needs a fix. The shared macOS
+      # runners are slow enough to lose the engine tests' timing races.
+      - name: Tests
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo nextest run --workspace --profile ci 2>&1 | tee nextest.log
+          flaky=$(sed 's/\x1b\[[0-9;]*m//g' nextest.log | grep -E '^\s*FLAKY ' | sed -E 's/^\s+//' | sort -u || true)
+          if [ -n "$flaky" ]; then
+            echo "### Flaky tests (passed on a retry)" >> "$GITHUB_STEP_SUMMARY"
+            while IFS= read -r line; do
+              echo "::warning title=Flaky test::$line"
+              echo "- \`$line\`" >> "$GITHUB_STEP_SUMMARY"
+            done <<< "$flaky"
+          fi
+
+      # nextest does not run doctests.
+      - name: Doctests
+        run: cargo test --workspace --doc

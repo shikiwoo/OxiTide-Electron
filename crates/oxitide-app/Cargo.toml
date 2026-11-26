@@ -75,7 +75,11 @@ libc = "0.2"
 keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 mpris-server = { version = "0.10", default-features = false, features = ["tokio"] }
 
-# Unsupported platforms (macOS is out of scope per spec §2) keep keyring's
-# featureless mock store so they still compile.
-[target.'cfg(not(any(windows, target_os = "linux")))'.dependencies]
+# macOS (fork-only port): the login Keychain.
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+souvlaki = { version = "=0.9.3", default-features = false }
+
+# Other platforms keep keyring's featureless mock store so they still compile.
+[target.'cfg(not(any(windows, target_os = "linux", target_os = "macos")))'.dependencies]
 keyring = { version = "3" }

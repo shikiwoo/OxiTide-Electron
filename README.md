@@ -75,9 +75,27 @@ Experimental. Tested on one machine: Bazzite (Fedora 45, KDE Plasma 6.8 on Wayla
 | Backend commands and events over the bridge | Working in first runs; broader testing ongoing |
 | Session restore, playback, tray, mini player, zoom, `tidal://` login | Implemented, not fully tested yet |
 | AutoMix lab (raw binary IPC response) | Implemented, untested |
-| Windows / macOS | Not supported: shell mode is Unix-only (the Tauri build there is unaffected) |
+| Windows | Plain Tauri shell (WebView2), NSIS installer from `.github/workflows/windows.yml` (manual) |
+| macOS | Plain Tauri shell (WKWebView), unsigned universal `.dmg` from `.github/workflows/macos.yml` (manual); see below. Untested on a Mac |
 | AppImage (CI) | Built by `.github/workflows/appimage.yml`; launch from the AppImage not yet tested |
 | Self-update | Off: download new AppImages from Releases |
+
+## macOS (fork-only port)
+
+Upstream doesn't support macOS; this fork adds it in separate per-platform files so rebases rarely conflict:
+
+- **Audio:** `crates/oxitide-audio/src/coreaudio_output.rs`, Core Audio through `cpal`, **shared mode only** (no
+  exclusive/hog mode by design; the picker hides the mode toggle). The HAL converts the track's rate to the device's.
+- **Media keys / Now Playing:** `crates/oxitide-app/src/media_controls_macos.rs` through `souvlaki`.
+- **Login token:** the macOS Keychain (`keyring` `apple-native`).
+- **`tidal://`:** registered by the bundle's Info.plist (Tauri deep-link config), delivered through `on_open_url`.
+- **Bundle:** `crates/oxitide-app/tauri.macos.conf.json` (merged automatically), `icons/icon.icns`.
+
+Run **Actions → macOS app → Run workflow** and download `OxiTide-macos-dmg`. The app is unsigned, so after copying it to
+Applications, clear the quarantine flag once: `xattr -cr /Applications/OxiTide.app`.
+
+To type-check the macOS code from Linux (no Mac needed; inside `oxitide-dev`, needs `clang` and
+`rustup target add aarch64-apple-darwin`): `scripts/check-macos.sh`, or `CARGO_CMD=clippy scripts/check-macos.sh -- -D warnings`.
 
 ## Install (AppImage)
 

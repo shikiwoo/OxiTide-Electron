@@ -26,7 +26,10 @@ keyring = { version = "3", features = ["windows-native"] }
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 
-# Unsupported platforms (macOS is out of scope per spec §2) keep keyring's
-# featureless mock store so they still compile.
-[target.'cfg(not(any(windows, target_os = "linux")))'.dependencies]
+# macOS (fork-only port): the login Keychain.
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+# Other platforms keep keyring's featureless mock store so they still compile.
+[target.'cfg(not(any(windows, target_os = "linux", target_os = "macos")))'.dependencies]
 keyring = { version = "3" }

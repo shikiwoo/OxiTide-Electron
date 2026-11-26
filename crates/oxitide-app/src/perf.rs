@@ -1125,6 +1125,9 @@ mod tests {
         assert_eq!(cpu_ms_from_ticks(300, 0), None);
     }
 
+    // Elsewhere (the fork's macOS port) process_memory_rows() is a stub with
+    // no rows, so write_memory_sample() writes nothing, ipc row included.
+    #[cfg(any(windows, target_os = "linux"))]
     #[test]
     fn samples_carry_ipc_counters_and_cpu() {
         let session = PerfSession::create_in(&temp_dir("ipc"), "S11").unwrap();
