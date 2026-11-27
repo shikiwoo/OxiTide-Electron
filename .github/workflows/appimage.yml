@@ -118,12 +118,19 @@ jobs:
       - name: Write manifest and checksums
         run: node scripts/release/make-manifest.mjs dist out "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY"
 
+      # docs/release-notes/<tag>.md, when the tag has one, heads the
+      # description; GitHub's generated change list follows it.
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          notes=()
+          if [ -f "docs/release-notes/$GITHUB_REF_NAME.md" ]; then
+            notes=(--notes-file "docs/release-notes/$GITHUB_REF_NAME.md")
+          fi
           gh release create "$GITHUB_REF_NAME" \
             dist/*.AppImage dist/*.exe dist/*.dmg out/latest.json out/SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \
             --title "OxiTide Electron ${GITHUB_REF_NAME#electron-v}" \
+            "${notes[@]}" \
             --generate-notes
