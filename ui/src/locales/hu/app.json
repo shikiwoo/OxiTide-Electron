@@ -459,6 +459,7 @@
   "common.optional": "Nem kötelező",
   "common.trackCount": "{count, plural, one {# szám} other {# szám}}",
   "common.undo": "Visszavonás",
+  "window.title": "OxiTide",
   "window.controls": "Ablakvezérlők",
   "window.minimize": "Kis méret",
   "window.maximize": "Teljes méret",

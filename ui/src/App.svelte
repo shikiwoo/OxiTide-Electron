@@ -36,6 +36,7 @@
   import Neko from "./lib/components/Neko.svelte";
   import PerfHud from "./lib/components/PerfHud.svelte";
   import WindowControls from "./lib/components/WindowControls.svelte";
+  import TitleBar from "./lib/components/TitleBar.svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { isDragTarget } from "./lib/titlebar";
   import { createNav, type Route } from "./lib/nav.svelte";
@@ -901,6 +902,7 @@
       {playlistActions}
       actions={collectionActions}
       playing={player.state.playing}
+      titlebar={customChrome}
     />
     <main class="main" id="main" tabindex="-1">
       {#if error}<p style="color:var(--danger)">{error}</p>{/if}
@@ -989,6 +991,9 @@
 <ToastHost {toasts} />
 <TrackAnnouncer />
 <DragGhost />
-{#if customChrome}<WindowControls maximizable={!(loggedIn && mini.active)} />{/if}
+{#if customChrome}
+  <TitleBar />
+  <WindowControls maximizable={!(loggedIn && mini.active)} />
+{/if}
 <ContextMenu {menu} />
 <PerfHud />

@@ -459,6 +459,7 @@
   "common.optional": "선택 사항",
   "common.trackCount": "{count, plural, other {#곡}}",
   "common.undo": "실행 취소",
+  "window.title": "OxiTide",
   "window.controls": "창 컨트롤",
   "window.minimize": "최소화",
   "window.maximize": "최대화",

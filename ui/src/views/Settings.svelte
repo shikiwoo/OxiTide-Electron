@@ -1918,7 +1918,7 @@
   }
   .nav {
     position: sticky;
-    top: calc(var(--titlebar-h) + 4px);
+    top: 4px;
     display: flex;
     flex-direction: column;
     gap: 2px;

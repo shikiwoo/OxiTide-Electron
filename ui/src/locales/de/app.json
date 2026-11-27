@@ -459,6 +459,7 @@
   "common.optional": "Optional",
   "common.trackCount": "{count, plural, one {# Titel} other {# Titel}}",
   "common.undo": "Rückgängig",
+  "window.title": "OxiTide",
   "window.controls": "Fenstersteuerung",
   "window.minimize": "Minimieren",
   "window.maximize": "Maximieren",

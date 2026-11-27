@@ -459,6 +459,7 @@
   "common.optional": "Opcional",
   "common.trackCount": "{count, plural, =0 {0 faixas} one {# faixa} many {# de faixas} other {# faixas}}",
   "common.undo": "Desfazer",
+  "window.title": "OxiTide",
   "window.controls": "Controles da janela",
   "window.minimize": "Minimizar",
   "window.maximize": "Maximizar",

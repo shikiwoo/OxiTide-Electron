@@ -37,6 +37,7 @@
     playlistActions,
     actions,
     playing = false,
+    titlebar = false,
   }: {
     nav: Nav;
     /// Collapsed to the icon rail (the user's choice or a narrow window).
@@ -45,6 +46,9 @@
     hoverExpand?: boolean;
     /// Playback is running (spins the playing playlist's mark).
     playing?: boolean;
+    /// The window's persistent title bar (custom chrome) shows the mark and
+    /// name, so the wordmark steps out and its row folds into the history row.
+    titlebar?: boolean;
     onToggleRail: () => void;
     collection: CollectionTree;
     playlistActions: PlaylistActions;
@@ -320,32 +324,40 @@
   class="sidebar"
   class:rail
   class:peek
+  class:chromed={titlebar}
   class:closing
   onpointerenter={onPointerEnter}
   onpointerleave={() => peekIntent.leave()}
   use:dropZone={sidebarZone}
 >
   <div class="scroll edge-fade" bind:this={scrollEl} use:edgeFade={{ watchChildren: true }}>
-    <div class="top">
+    {#snippet collapseButton()}
+      <!-- Labelled from the collapsed state: on a hover-expanded rail it pins
+           the sidebar open. -->
+      <button
+        class="collapse"
+        onclick={onToggleRail}
+        aria-label={collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
+        title={t(collapsed ? "nav.expandSidebarHint" : "nav.collapseSidebarHint", { key: "Ctrl+B" })}
+      ><Icon name={collapsed ? "panel-left-open" : "panel-left-close"} size={18} /></button>
+    {/snippet}
+    <!-- Under the title bar the wordmark is only the screen-reader heading and,
+         off the rail, the collapse button joins the history row, so this row
+         takes no space. -->
+    <div class="top" class:bare={titlebar && !rail}>
       <h1 class="wordmark" aria-label="OxiTide">
         <Logo size={28} />{#if !rail}OxiTide{/if}
       </h1>
-      <div class="top-actions">
-        <!-- Labelled from the collapsed state: on a hover-expanded rail it pins
-             the sidebar open. -->
-        <button
-          class="collapse"
-          onclick={onToggleRail}
-          aria-label={collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
-          title={t(collapsed ? "nav.expandSidebarHint" : "nav.collapseSidebarHint", { key: "Ctrl+B" })}
-        ><Icon name={collapsed ? "panel-left-open" : "panel-left-close"} size={18} /></button>
-      </div>
+      {#if rail || !titlebar}
+        <div class="top-actions">{@render collapseButton()}</div>
+      {/if}
     </div>
 
     {#if !rail}
       <div class="history">
         <button disabled={!nav.canBack} onclick={() => nav.back()} title={t("nav.backHint", { key: "Alt+←" })} aria-label={t("nav.back")}><Icon name="chevron-left" /></button>
         <button disabled={!nav.canForward} onclick={() => nav.forward()} title={t("nav.forwardHint", { key: "Alt+→" })} aria-label={t("nav.forward")}><Icon name="chevron-right" /></button>
+        {#if titlebar}{@render collapseButton()}{/if}
       </div>
     {/if}
 
@@ -827,6 +839,32 @@
   }
   .rail .top:has(.collapse:hover, .collapse:focus-visible) .wordmark {
     opacity: 0;
+  }
+  /* Persistent title bar (custom window chrome, `titlebar`): the bar already
+     shows the mark and name, so the wordmark leaves the view but stays the
+     sidebar's heading for screen readers. Off the rail its row takes no space
+     (the collapse button sits at the end of the history row); on the rail the
+     button is always shown in the mark's place instead of only on hover. */
+  .chromed .wordmark {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  /* Also cancels the scroll column's 2px gap below the empty row. */
+  .top.bare {
+    margin-bottom: -2px;
+  }
+  .history .collapse {
+    margin-left: auto;
+  }
+  .chromed.rail .collapse {
+    position: static;
+    width: 40px;
+    height: 28px;
+    opacity: 1;
   }
   .rail .tree :global(.row) {
     justify-content: center;

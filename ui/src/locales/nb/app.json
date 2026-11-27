@@ -459,6 +459,7 @@
   "common.optional": "Valgfritt",
   "common.trackCount": "{count, plural, one {# spor} other {# spor}}",
   "common.undo": "Angre",
+  "window.title": "OxiTide",
   "window.controls": "Vinduskontroller",
   "window.minimize": "Minimer",
   "window.maximize": "Maksimer",

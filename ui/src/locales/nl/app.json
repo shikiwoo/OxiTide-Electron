@@ -459,6 +459,7 @@
   "common.optional": "Optioneel",
   "common.trackCount": "{count, plural, one {# nummer} other {# nummers}}",
   "common.undo": "Ongedaan maken",
+  "window.title": "OxiTide",
   "window.controls": "Vensterknoppen",
   "window.minimize": "Minimaliseren",
   "window.maximize": "Maximaliseren",

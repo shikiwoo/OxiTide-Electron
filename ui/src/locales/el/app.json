@@ -459,6 +459,7 @@
   "common.optional": "Προαιρετικό",
   "common.trackCount": "{count, plural, one {# κομμάτι} other {# κομμάτια}}",
   "common.undo": "Αναίρεση",
+  "window.title": "OxiTide",
   "window.controls": "Στοιχεία ελέγχου παραθύρου",
   "window.minimize": "Ελαχιστοποίηση",
   "window.maximize": "Μεγιστοποίηση",

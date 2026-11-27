@@ -459,6 +459,7 @@
   "common.optional": "Opcional",
   "common.trackCount": "{count, plural, one {# canción} many {# de canciones} other {# canciones}}",
   "common.undo": "Deshacer",
+  "window.title": "OxiTide",
   "window.controls": "Controles de la ventana",
   "window.minimize": "Minimizar",
   "window.maximize": "Maximizar",

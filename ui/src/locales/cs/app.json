@@ -459,6 +459,7 @@
   "common.optional": "Volitelné",
   "common.trackCount": "{count, plural, one {# skladba} few {# skladby} many {# skladby} other {# skladeb}}",
   "common.undo": "Zpět",
+  "window.title": "OxiTide",
   "window.controls": "Ovládání okna",
   "window.minimize": "Minimalizovat",
   "window.maximize": "Maximalizovat",

@@ -459,6 +459,7 @@
   "common.optional": "Facultatif",
   "common.trackCount": "{count, plural, one {# titre} many {# de titres} other {# titres}}",
   "common.undo": "Annuler",
+  "window.title": "OxiTide",
   "window.controls": "Commandes de la fenêtre",
   "window.minimize": "Réduire",
   "window.maximize": "Agrandir",

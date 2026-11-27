@@ -459,6 +459,7 @@
   "common.optional": "Необов’язково",
   "common.trackCount": "{count, plural, one {# трек} few {# треки} many {# треків} other {# треку}}",
   "common.undo": "Скасувати",
+  "window.title": "OxiTide",
   "window.controls": "Керування вікном",
   "window.minimize": "Згорнути",
   "window.maximize": "Розгорнути",
