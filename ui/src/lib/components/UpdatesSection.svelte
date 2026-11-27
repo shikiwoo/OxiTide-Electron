@@ -93,7 +93,7 @@
 
 <SettingsSection title={t("settings.section.updates")} icon="download">
   {#if support}
-    <SettingRow id="updates-check" label={`OxiTide ${support.current_version}`} description={message}>
+    <SettingRow id="updates-check" label={t("updates.versionLabel", { version: support.current_version })} description={message}>
       {#if support.supported}
         {#if phase === "available"}
           <Button variant="primary" icon="download" onclick={() => (confirming = true)}>{t("updates.install")}</Button>

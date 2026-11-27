@@ -1079,6 +1079,7 @@
   "remoteSettings.expires": "与这台电脑使用同一 Wi-Fi。{time} 后过期。",
   "remoteSettings.autoAddressDefault": "自动",
   "updates.checking": "正在检查更新…",
+  "updates.versionLabel": "shikiwoo/oxitide {version}",
   "updates.current": "你使用的已是最新版本。",
   "updates.available": "版本 {version} 已发布。",
   "updates.install": "下载并安装",

@@ -1079,6 +1079,7 @@
   "remoteSettings.expires": "Selbes WLAN wie dieser PC. Läuft in {time} ab.",
   "remoteSettings.autoAddressDefault": "Automatisch",
   "updates.checking": "Suche nach Updates…",
+  "updates.versionLabel": "shikiwoo/oxitide {version}",
   "updates.current": "Du verwendest die neueste Version.",
   "updates.available": "Version {version} ist verfügbar.",
   "updates.install": "Herunterladen und installieren",

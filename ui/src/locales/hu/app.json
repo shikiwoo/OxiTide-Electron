@@ -1079,6 +1079,7 @@
   "remoteSettings.expires": "Ugyanaz a Wi-Fi, mint ennél a gépnél. Lejár: {time} múlva.",
   "remoteSettings.autoAddressDefault": "Automatikus",
   "updates.checking": "Frissítések keresése…",
+  "updates.versionLabel": "shikiwoo/oxitide {version}",
   "updates.current": "A legújabb verziót használod.",
   "updates.available": "Elérhető a(z) {version} verzió.",
   "updates.install": "Letöltés és telepítés",

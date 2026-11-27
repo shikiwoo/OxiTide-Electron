@@ -1079,6 +1079,7 @@
   "remoteSettings.expires": "Samma wifi som den här datorn. Går ut om {time}.",
   "remoteSettings.autoAddressDefault": "Automatisk",
   "updates.checking": "Söker efter uppdateringar…",
+  "updates.versionLabel": "shikiwoo/oxitide {version}",
   "updates.current": "Du har den senaste versionen.",
   "updates.available": "Version {version} finns tillgänglig.",
   "updates.install": "Ladda ned och installera",

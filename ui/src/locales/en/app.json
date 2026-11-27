@@ -1140,6 +1140,7 @@
   "remoteSettings.autoAddressDefault": "Automatic",
 
   "updates.checking": "Checking for updates…",
+  "updates.versionLabel": "shikiwoo/oxitide {version}",
   "updates.current": "You are on the latest version.",
   "updates.available": "Version {version} is available.",
   "updates.install": "Download and install",

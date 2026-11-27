@@ -1140,6 +1140,7 @@
   "remoteSettings.autoAddressDefault": "Phone remote setting: the network address is chosen automatically (an address, not a device icon).",
 
   "updates.checking": "Status.",
+  "updates.versionLabel": "Settings → Updates: the installed version. Keep \"shikiwoo/oxitide\" as is: it is the GitHub repository updates come from.",
   "updates.current": "Status.",
   "updates.available": "Status.",
   "updates.install": "Button.",

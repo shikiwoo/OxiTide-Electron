@@ -1079,6 +1079,7 @@
   "remoteSettings.expires": "Stejná Wi-Fi jako tento počítač. Platnost vyprší za {time}.",
   "remoteSettings.autoAddressDefault": "Automatická",
   "updates.checking": "Hledání aktualizací…",
+  "updates.versionLabel": "shikiwoo/oxitide {version}",
   "updates.current": "Máte nejnovější verzi.",
   "updates.available": "K dispozici je verze {version}.",
   "updates.install": "Stáhnout a nainstalovat",

@@ -5394,6 +5394,11 @@
     "source": "497a1998",
     "draft": "63578bea"
   },
+  "updates.versionLabel": {
+    "status": "machine",
+    "source": "929f15bc",
+    "draft": "929f15bc"
+  },
   "updates.current": {
     "status": "machine",
     "source": "eeced728",

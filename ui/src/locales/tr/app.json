@@ -1079,6 +1079,7 @@
   "remoteSettings.expires": "Bu bilgisayarla aynı Wi-Fi ağı. Kalan süre: {time}.",
   "remoteSettings.autoAddressDefault": "Otomatik",
   "updates.checking": "Güncellemeler denetleniyor…",
+  "updates.versionLabel": "shikiwoo/oxitide {version}",
   "updates.current": "En son sürümü kullanıyorsun.",
   "updates.available": "Sürüm {version} hazır.",
   "updates.install": "İndir ve yükle",

@@ -1079,6 +1079,7 @@
   "remoteSettings.expires": "Ίδιο Wi-Fi με αυτόν τον υπολογιστή. Λήγει σε {time}.",
   "remoteSettings.autoAddressDefault": "Αυτόματη",
   "updates.checking": "Έλεγχος για ενημερώσεις…",
+  "updates.versionLabel": "shikiwoo/oxitide {version}",
   "updates.current": "Έχεις την πιο πρόσφατη έκδοση.",
   "updates.available": "Η έκδοση {version} είναι διαθέσιμη.",
   "updates.install": "Λήψη και εγκατάσταση",

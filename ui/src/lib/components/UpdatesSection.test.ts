@@ -35,6 +35,12 @@ describe("Settings → Updates", () => {
     expect(await screen.findByText("You are on the latest version.")).toBeTruthy();
   });
 
+  it("labels the installed version with the repository updates come from", async () => {
+    mocks.api.getUpdateSupport.mockResolvedValue(support());
+    render(UpdatesSection);
+    expect(await screen.findByText("shikiwoo/oxitide 0.2.0")).toBeTruthy();
+  });
+
   async function offerRelease() {
     mocks.api.getUpdateSupport.mockResolvedValue(support());
     mocks.api.checkForUpdate.mockResolvedValue({
