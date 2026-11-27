@@ -1174,6 +1174,46 @@ mod tests {
     }
 
     #[test]
+    fn download_ahead_into_memory_publishes_the_whole_track() {
+        let cache = TrackCache::memory(1 << 30);
+        let key = cache_key();
+        let writer = cache.begin_write(&key).unwrap();
+        let gate = Arc::new(AheadGate::default());
+        let fetcher = Arc::new(ChunkFetcher {
+            chunk: vec![7u8; AHEAD_CHUNK],
+            calls: Mutex::new(0),
+        });
+        let buf = StreamBuffer::new();
+        let handle = {
+            let (buf, fetcher, ticket) = (buf.clone(), fetcher.clone(), gate.register(true));
+            std::thread::spawn(move || {
+                download_ahead(
+                    buf,
+                    fetcher,
+                    chunk_plan(64),
+                    AheadSink::Cache(writer),
+                    ticket,
+                    None,
+                )
+            })
+        };
+
+        assert!(
+            wait_until(|| cache.lookup(&key).is_some()),
+            "the entry was never published"
+        );
+        assert_eq!(fetcher.calls(), 64);
+        assert_eq!(drain(&buf).ok(), Some(64 * AHEAD_CHUNK));
+        handle.join().unwrap();
+        assert_eq!(
+            entry_bytes(cache.lookup(&key).unwrap()),
+            vec![7u8; 64 * AHEAD_CHUNK]
+        );
+        assert_eq!(cache.size_bytes(), (64 * AHEAD_CHUNK) as u64);
+        assert_eq!(cache.pending_bytes(), 0);
+    }
+
+    #[test]
     fn a_download_behind_the_playing_track_stays_paced_until_it_is_first() {
         let dir = temp_dir();
         let gate = Arc::new(AheadGate::default());
@@ -1378,6 +1418,36 @@ mod tests {
         );
         assert!(!buf.is_stalled(), "the stall flag stayed on");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn memory_scratch_rides_out_a_network_drop() {
+        let cache = TrackCache::memory(1 << 30);
+        let gate = Arc::new(AheadGate::default());
+        let fetcher = outage_fetcher("s3", 3, false);
+        let buf = StreamBuffer::new();
+        *fetcher.buffer.lock().unwrap() = Some(buf.clone());
+        let sink = AheadSink::MemScratch(cache.memory_scratch().expect("memory mode"));
+        download_ahead(
+            buf.clone(),
+            fetcher.clone(),
+            chunk_plan(6),
+            sink,
+            gate.register(true),
+            None,
+        );
+        assert_eq!(
+            drain(&buf).ok(),
+            Some(6 * AHEAD_CHUNK),
+            "the stream did not continue"
+        );
+        assert!(
+            fetcher.stalled_seen.load(Ordering::SeqCst),
+            "the stall was not published"
+        );
+        assert!(!buf.is_stalled(), "the stall flag stayed on");
+        assert_eq!(cache.pending_bytes(), 0, "the scratch bytes were not freed");
+        assert_eq!(cache.size_bytes(), 0, "a scratch download was cached");
     }
 
     #[test]

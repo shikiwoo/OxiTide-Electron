@@ -14,7 +14,7 @@ use oxitide_tidal::stream::Quality;
 use symphonia::core::io::MediaSource;
 
 use crate::demux::FileSource;
-use crate::mem_cache::{ChunkReader, MemWriter, MemoryCache};
+use crate::mem_cache::{ChunkReader, MemScratch, MemWriter, MemoryCache};
 
 /// `.part` files older than this are stale temporary downloads.
 const STALE_PART_AGE: Duration = Duration::from_secs(3600);
@@ -592,6 +592,15 @@ impl TrackCache {
         match self {
             Self::Disk(disk) => disk.find_offline(track_id, quality),
             Self::Memory(_) => None,
+        }
+    }
+
+    /// A RAM scratch buffer for an uncached run-ahead download (a seek, a
+    /// second writer); `None` on disk, where the scratch is a file.
+    pub fn memory_scratch(&self) -> Option<MemScratch> {
+        match self {
+            Self::Disk(_) => None,
+            Self::Memory(memory) => Some(memory.scratch()),
         }
     }
 
