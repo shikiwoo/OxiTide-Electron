@@ -19,6 +19,7 @@ pub mod engine;
 pub mod error;
 pub mod fetch;
 pub(crate) mod gain;
+pub mod mem_cache;
 pub mod meter;
 pub mod mpd;
 pub mod output;
