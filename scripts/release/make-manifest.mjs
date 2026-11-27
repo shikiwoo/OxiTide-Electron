@@ -15,7 +15,7 @@ const BUNDLES = [
 ];
 
 /// Files whose checksums are published (installers, not signatures).
-const CHECKSUMMED = [/\.exe$/, /\.msi$/, /\.deb$/, /\.AppImage$/];
+const CHECKSUMMED = [/\.exe$/, /\.msi$/, /\.deb$/, /\.AppImage$/, /\.dmg$/];
 
 function walk(dir) {
   const out = [];
@@ -32,8 +32,14 @@ export function sha256(path) {
 }
 
 /// `files` are full paths; `readText(path)` returns a file's text (the .sig).
+/// The version a release tag names: upstream's `v1.2.3`, or this fork's
+/// `electron-v1.2.3-1`.
+export function tagVersion(tag) {
+  return tag.replace(/^(electron-)?v/, "");
+}
+
 export function buildManifest({ files, tag, repo, notes, pubDate, readText }) {
-  const version = tag.replace(/^v/, "");
+  const version = tagVersion(tag);
   const byName = new Map(files.map((file) => [basename(file), file]));
   const platforms = {};
   for (const name of byName.keys()) {
@@ -69,7 +75,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     files,
     tag,
     repo,
-    notes: notes || `OxiTide ${tag.replace(/^v/, "")}`,
+    notes: notes || `OxiTide ${tagVersion(tag)}`,
     pubDate: new Date().toISOString(),
     readText: (path) => readFileSync(path, "utf8"),
   });

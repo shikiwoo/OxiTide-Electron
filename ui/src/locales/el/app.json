@@ -1086,7 +1086,7 @@
   "updates.downloadingPercent": "Λήψη {percent}% — το OxiTide θα κάνει επανεκκίνηση μόλις ολοκληρωθεί.",
   "updates.download": "Λήψη ενημέρωσης",
   "updates.confirmTitle": "Εγκατάσταση του OxiTide {version};",
-  "updates.confirmMessage": "Το OxiTide θα κατεβάσει αυτή την έκδοση από τις κυκλοφορίες του στο GitHub (github.com/Zephulbr/OxiTide), θα ελέγξει την υπογραφή της, θα εκτελέσει το πρόγραμμα εγκατάστασης και θα κάνει επανεκκίνηση. Τίποτα δεν κατεβαίνει πριν το επιβεβαιώσεις.",
+  "updates.confirmMessage": "Το OxiTide θα κατεβάσει αυτή την έκδοση από τις κυκλοφορίες του στο GitHub (github.com/shikiwoo/OxiTide-Electron), θα ελέγξει την υπογραφή της, θα εκτελέσει το πρόγραμμα εγκατάστασης και θα κάνει επανεκκίνηση. Τίποτα δεν κατεβαίνει πριν το επιβεβαιώσεις.",
   "catjam.coat.white": "Λευκή",
   "catjam.coat.black": "Μαύρη",
   "catjam.coat.ginger": "Πορτοκαλί τιγρέ",

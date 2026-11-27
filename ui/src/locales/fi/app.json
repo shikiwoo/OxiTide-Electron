@@ -1086,7 +1086,7 @@
   "updates.downloadingPercent": "Ladataan {percent} % – OxiTide käynnistyy uudelleen, kun lataus on valmis.",
   "updates.download": "Päivityksen lataus",
   "updates.confirmTitle": "Asennetaanko OxiTide {version}?",
-  "updates.confirmMessage": "OxiTide lataa tämän version GitHub-julkaisuistaan (github.com/Zephulbr/OxiTide), tarkistaa sen allekirjoituksen, suorittaa asennusohjelman ja käynnistyy uudelleen. Mitään ei ladata ennen kuin vahvistat.",
+  "updates.confirmMessage": "OxiTide lataa tämän version GitHub-julkaisuistaan (github.com/shikiwoo/OxiTide-Electron), tarkistaa sen allekirjoituksen, suorittaa asennusohjelman ja käynnistyy uudelleen. Mitään ei ladata ennen kuin vahvistat.",
   "catjam.coat.white": "Valkoinen",
   "catjam.coat.black": "Musta",
   "catjam.coat.ginger": "Punainen tabby",

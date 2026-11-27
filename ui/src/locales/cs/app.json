@@ -1086,7 +1086,7 @@
   "updates.downloadingPercent": "Stahování {percent} % – OxiTide se po dokončení restartuje.",
   "updates.download": "Stahování aktualizace",
   "updates.confirmTitle": "Nainstalovat OxiTide {version}?",
-  "updates.confirmMessage": "OxiTide stáhne tuto verzi z vydání na GitHubu (github.com/Zephulbr/OxiTide), ověří její podpis, spustí instalátor a restartuje se. Dokud nepotvrdíte, nic se nestáhne.",
+  "updates.confirmMessage": "OxiTide stáhne tuto verzi z vydání na GitHubu (github.com/shikiwoo/OxiTide-Electron), ověří její podpis, spustí instalátor a restartuje se. Dokud nepotvrdíte, nic se nestáhne.",
   "catjam.coat.white": "Bílá",
   "catjam.coat.black": "Černá",
   "catjam.coat.ginger": "Zrzavá mourovatá",

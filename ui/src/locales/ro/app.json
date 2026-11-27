@@ -1086,7 +1086,7 @@
   "updates.downloadingPercent": "Se descarcă {percent}% — OxiTide repornește când termină.",
   "updates.download": "Descărcarea actualizării",
   "updates.confirmTitle": "Instalezi OxiTide {version}?",
-  "updates.confirmMessage": "OxiTide va descărca această versiune din lansările sale de pe GitHub (github.com/Zephulbr/OxiTide), îi va verifica semnătura, apoi va rula programul de instalare și va reporni. Nu se descarcă nimic până nu confirmi.",
+  "updates.confirmMessage": "OxiTide va descărca această versiune din lansările sale de pe GitHub (github.com/shikiwoo/OxiTide-Electron), îi va verifica semnătura, apoi va rula programul de instalare și va reporni. Nu se descarcă nimic până nu confirmi.",
   "catjam.coat.white": "Albă",
   "catjam.coat.black": "Neagră",
   "catjam.coat.ginger": "Tărcată roșcată",

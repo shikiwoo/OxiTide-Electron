@@ -1086,7 +1086,7 @@
   "updates.downloadingPercent": "Mengunduh {percent}% — OxiTide dimulai ulang setelah selesai.",
   "updates.download": "Unduhan pembaruan",
   "updates.confirmTitle": "Pasang OxiTide {version}?",
-  "updates.confirmMessage": "OxiTide akan mengunduh versi ini dari rilis GitHub-nya (github.com/Zephulbr/OxiTide), memeriksa tanda tangannya, lalu menjalankan installer dan dimulai ulang. Tidak ada yang diunduh sebelum kamu mengonfirmasi.",
+  "updates.confirmMessage": "OxiTide akan mengunduh versi ini dari rilis GitHub-nya (github.com/shikiwoo/OxiTide-Electron), memeriksa tanda tangannya, lalu menjalankan installer dan dimulai ulang. Tidak ada yang diunduh sebelum kamu mengonfirmasi.",
   "catjam.coat.white": "Putih",
   "catjam.coat.black": "Hitam",
   "catjam.coat.ginger": "Belang oranye",

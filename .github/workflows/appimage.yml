@@ -2,7 +2,10 @@ name: AppImage (Electron)
 
 # Builds the Electron flavour as an AppImage (electron/package.sh).
 # - push to main / manual run: the AppImage is a workflow artifact (14 days).
-# - tag electron-v<version> (e.g. electron-v1.1.8-1): also a GitHub Release.
+# - tag electron-v<version> (e.g. electron-v1.1.8-1): also a GitHub Release
+#   with the AppImage, the signed Windows installer (windows.yml), the macOS
+#   .dmg (macos.yml), latest.json for the Windows updater and SHA256SUMS.txt.
+#   The tag's version must match the workspace Cargo.toml.
 # Upstream's own workflows (ci, release, audit, pages) are disabled in this
 # repository; release.yml listens to `v*` tags, which this fork doesn't use.
 
@@ -85,23 +88,42 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # A release also carries the Windows installer (signed for the updater) and
+  # the macOS disk image, built by their own workflows.
+  windows:
+    if: startsWith(github.ref, 'refs/tags/electron-v')
+    uses: ./.github/workflows/windows.yml
+    secrets: inherit
+
+  macos:
+    if: startsWith(github.ref, 'refs/tags/electron-v')
+    uses: ./.github/workflows/macos.yml
+
   release:
     if: startsWith(github.ref, 'refs/tags/electron-v')
-    needs: appimage
+    needs: [appimage, windows, macos]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v5
+
       - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
 
+      # latest.json is what installed Windows copies read (the updater
+      # endpoint in tauri.conf.json); SHA256SUMS.txt covers every installer.
+      - name: Write manifest and checksums
+        run: node scripts/release/make-manifest.mjs dist out "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY"
+
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.AppImage dist/SHA256SUMS.txt \
+          gh release create "$GITHUB_REF_NAME" \
+            dist/*.AppImage dist/*.exe dist/*.dmg out/latest.json out/SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \
             --title "OxiTide Electron ${GITHUB_REF_NAME#electron-v}" \
             --generate-notes

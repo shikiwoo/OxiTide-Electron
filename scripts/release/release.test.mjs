@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildManifest, checksumLines } from "./make-manifest.mjs";
+import { buildManifest, checksumLines, tagVersion } from "./make-manifest.mjs";
 import { versionProblems, workspaceVersion } from "./check-version.mjs";
 import { branchProblem, releaseBranch } from "./check-branch.mjs";
 import { archPkgver, renderPkgbuild } from "./make-pkgbuild.mjs";
@@ -42,6 +42,36 @@ test("manifest maps bundles to platform keys with trimmed signatures", () => {
   );
   assert.equal(manifest.platforms["windows-x86_64-nsis"], nsis);
   assert.ok(manifest.platforms["windows-x86_64-msi"].url.endsWith(".msi"));
+});
+
+test("the fork's electron-v tags name the version, and URLs keep the tag", () => {
+  assert.equal(tagVersion("electron-v1.1.8-1"), "1.1.8-1");
+  assert.equal(tagVersion("v1.1.8"), "1.1.8");
+  const manifest = buildManifest({
+    files: [
+      "w/OxiTide_1.1.8-1_x64-setup.exe",
+      "w/OxiTide_1.1.8-1_x64-setup.exe.sig",
+      "l/OxiTide-Electron-1.1.8-1-x86_64.AppImage",
+    ],
+    tag: "electron-v1.1.8-1",
+    repo: "o/r",
+    notes: "",
+    pubDate: "",
+    readText,
+  });
+  assert.equal(manifest.version, "1.1.8-1");
+  // The Electron AppImage doesn't self-update, so it isn't listed.
+  assert.deepEqual(Object.keys(manifest.platforms).sort(), ["windows-x86_64", "windows-x86_64-nsis"]);
+  assert.equal(
+    manifest.platforms["windows-x86_64"].url,
+    "https://github.com/o/r/releases/download/electron-v1.1.8-1/OxiTide_1.1.8-1_x64-setup.exe",
+  );
+});
+
+test("checksums include the macOS disk image", () => {
+  assert.deepEqual(checksumLines(["m/OxiTide_1.1.8-1_universal.dmg", "m/x.dmg.sig"], () => "h"), [
+    "h  OxiTide_1.1.8-1_universal.dmg",
+  ]);
 });
 
 test("a bundle without its signature is an error", () => {

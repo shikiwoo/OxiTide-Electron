@@ -35,7 +35,7 @@ phone remote, scrobbling) under a Svelte 5 UI. This fork keeps all of that and a
 | **AppImage** of the Electron build, published as GitHub Releases | Linux |
 | **macOS port:** Core Audio output, Now Playing / media keys, Keychain login, universal `.dmg` | macOS |
 | **Persistent title bar:** a solid strip with the app's mark and name over the undecorated window, instead of an invisible drag band | Windows |
-| **Updater pointed at this fork** (`tauri.fork.conf.json`), so an install never "updates" to upstream OxiTide | Windows, macOS |
+| **Updates from this fork:** the updater reads this repository's releases and only installs builds signed with the fork's own key, so an install never "updates" to upstream OxiTide | Windows |
 | **UI changes:** share button in the player bar and *Copy link* in track menus; track-list pages scroll as one (header and rows together); album, playlist and mix titles wrap to two lines across the full header width | All |
 
 The fork is based on upstream **1.1.8**. Its versions add a fork revision: `1.1.8-1` is the first fork release on top
@@ -57,21 +57,22 @@ Experimental.
 
 | Platform | Shell | How it's built | State |
 | --- | --- | --- | --- |
-| Linux | Electron 45 (Chromium) | AppImage from CI on every push to `main`; Releases for `electron-v*` tags | Main target of the fork. Tested on Bazzite (Fedora, KDE Plasma 6 on Wayland), RTX 3060 Ti, 240 Hz + 180 Hz monitors. Session restore, tray, mini player, zoom, `tidal://` login and the AutoMix lab are implemented but not fully tested |
-| Windows | Tauri (WebView2) | NSIS installer from the manual **Windows installer** workflow, or locally | Builds and runs |
-| macOS | Tauri (WKWebView) | Unsigned universal `.dmg` from the **macOS app** workflow | Builds and passes its tests in CI; untested on a Mac |
+| Linux | Electron 45 (Chromium) | AppImage on every push to `main` and in every release | Main target of the fork. Tested on Bazzite (Fedora, KDE Plasma 6 on Wayland), RTX 3060 Ti, 240 Hz + 180 Hz monitors. Session restore, tray, mini player, zoom, `tidal://` login and the AutoMix lab are implemented but not fully tested |
+| Windows | Tauri (WebView2) | Per-user NSIS installer in every release | Builds and runs; updates itself from this repository's releases |
+| macOS | Tauri (WKWebView) | Unsigned universal `.dmg` in every release | Builds and passes its tests in CI; untested on a Mac |
 
-Self-update: off in the Electron shell (download new AppImages from Releases). The Windows and macOS builds made with
-`tauri.fork.conf.json` check this repository's Releases, but releases don't include an updater manifest yet, so in
-practice they never update themselves.
+Self-update: **Windows only.** The app reads `latest.json` from this repository's latest release and installs it after
+checking its signature against the fork's key. The Linux AppImage and macOS builds don't update themselves; download
+the next release.
 
 ## Install
 
 ### Linux (AppImage)
 
 Download `OxiTide-Electron-<version>-x86_64.AppImage` from
-[Releases](https://github.com/shikiwoo/OxiTide-Electron/releases), or a newer build from the **Artifacts** of the latest
-[AppImage (Electron)](https://github.com/shikiwoo/OxiTide-Electron/actions/workflows/appimage.yml) run (kept 14 days).
+[Releases](https://github.com/shikiwoo/OxiTide-Electron/releases/latest), or a newer build from the **Artifacts** of the
+latest [AppImage (Electron)](https://github.com/shikiwoo/OxiTide-Electron/actions/workflows/appimage.yml) run (kept 14
+days).
 
 ```bash
 chmod +x OxiTide-Electron-*-x86_64.AppImage
@@ -88,14 +89,19 @@ chmod +x OxiTide-Electron-*-x86_64.AppImage
 
 ### Windows
 
-Run **Actions → Windows installer → Run workflow** and download `OxiTide-windows-nsis`, or build it yourself
-([Build → Windows](#windows-1)). The installer is per-user and unsigned, so SmartScreen may warn on first run. WebView2
-downloads at install time if it's missing.
+Download `OxiTide_<version>_x64-setup.exe` from [Releases](https://github.com/shikiwoo/OxiTide-Electron/releases/latest).
+The installer is per-user and isn't code-signed, so SmartScreen may warn on first run (**More info → Run anyway**,
+after checking it against `SHA256SUMS.txt`). WebView2 downloads at install time if it's missing. Later versions arrive
+through **Settings → Updates**.
+
+An install from upstream OxiTide, or a fork build from before 1.1.8-1, checks upstream for updates. Install the fork's
+release once by hand to move it over.
 
 ### macOS
 
-Run **Actions → macOS app → Run workflow** and download `OxiTide-macos-dmg`. The app is unsigned: after copying it to
-Applications, clear the quarantine flag once with `xattr -cr /Applications/OxiTide.app`.
+Download `OxiTide_<version>_universal.dmg` from [Releases](https://github.com/shikiwoo/OxiTide-Electron/releases/latest).
+The app is unsigned: after copying it to Applications, clear the quarantine flag once with
+`xattr -cr /Applications/OxiTide.app`.
 
 ## Build
 
@@ -134,11 +140,11 @@ distrobox enter oxitide-dev -- ./electron/build.sh
 
 ```powershell
 npm --prefix ui ci
-npm --prefix ui run app:build -- --config crates/oxitide-app/tauri.fork.conf.json --bundles nsis
+npm --prefix ui run app:build -- --bundles nsis
 ```
 
-The installer lands in `target/release/bundle/nsis/`. Leave out `--config …` and the build's updater points at
-upstream OxiTide, which would offer to replace it with an upstream release.
+The installer lands in `target/release/bundle/nsis/`. A local build checks this repository for updates like a release
+does; the release workflow also signs the installer for the updater.
 
 ### macOS
 
@@ -225,16 +231,24 @@ Upstream's own workflows (CI, Release, Audit, Pages) are disabled in this reposi
 
 | Workflow | Runs on | Produces |
 | --- | --- | --- |
-| [`appimage.yml`](.github/workflows/appimage.yml) | push to `main`, `electron-v*` tags, manual | AppImage artifact; a GitHub Release for a tag |
-| [`windows.yml`](.github/workflows/windows.yml) | manual | NSIS installer artifact |
-| [`macos.yml`](.github/workflows/macos.yml) | push to `macos-port`, manual | universal `.dmg` artifact (or tests only) |
+| [`appimage.yml`](.github/workflows/appimage.yml) | push to `main`, `electron-v*` tags, manual | AppImage artifact; for a tag, the GitHub Release |
+| [`windows.yml`](.github/workflows/windows.yml) | manual; called for a tag | signed NSIS installer and its `.sig` |
+| [`macos.yml`](.github/workflows/macos.yml) | push to `macos-port`, manual; called for a tag | universal `.dmg` (or tests only) |
+
+An `electron-v*` tag builds all three platforms and publishes a release with the AppImage, the Windows installer, the
+`.dmg`, `latest.json` (the Windows updater's manifest, from `scripts/release/make-manifest.mjs`) and `SHA256SUMS.txt`.
 
 To release: set the version in the workspace `Cargo.toml` (the only place it lives), push to `main`, wait for the
-AppImage run to pass, then tag that commit:
+AppImage run to pass, then tag that commit with the same version:
 
 ```bash
 git tag electron-v1.1.8-1 && git push origin electron-v1.1.8-1
 ```
+
+**Signing key.** Updates are signed with the fork's key pair: the public key is `plugins.updater.pubkey` in
+`crates/oxitide-app/tauri.conf.json`, and the private key and its password are the repository secrets
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Keep a backup of the private key: installed
+copies only accept updates signed with it, so losing it means every user has to reinstall by hand.
 
 ## Keeping up with upstream
 
@@ -252,7 +266,8 @@ Most fork changes live in their own files, so merges rarely conflict:
 | `ui/src/shell/`, `ui/vite.config.ts`, `ui/public/shell-blank.html` | Shims and the `electron` build mode |
 | `electron/` | The Electron app, scripts and electron-builder config |
 | `crates/oxitide-audio/src/coreaudio_output.rs`, `crates/oxitide-app/src/media_controls_macos.rs`, `tauri.macos.conf.json`, `icons/icon.icns` | macOS port |
-| `crates/oxitide-app/tauri.fork.conf.json` | Updater endpoint for Windows/macOS builds |
+| `crates/oxitide-app/tauri.conf.json` (`plugins.updater`), `updates.confirmMessage` in `ui/src/locales/*/app.json` | Updater endpoint and key, and the repository the update dialog names |
+| `scripts/release/make-manifest.mjs` | Accepts `electron-v` tags; checksums the `.dmg` |
 | `ui/src/lib/components/TitleBar.svelte`, `Sidebar.svelte`, `app.css` | Windows title bar |
 | `.github/workflows/{appimage,windows,macos}.yml` | Fork builds and releases |
 

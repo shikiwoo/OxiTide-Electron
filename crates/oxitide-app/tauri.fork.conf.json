@@ -1,7 +1,0 @@
-{
-  "plugins": {
-    "updater": {
-      "endpoints": ["https://github.com/shikiwoo/OxiTide-Electron/releases/latest/download/latest.json"]
-    }
-  }
-}

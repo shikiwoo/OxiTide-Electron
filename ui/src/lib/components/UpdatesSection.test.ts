@@ -54,7 +54,7 @@ describe("Settings → Updates", () => {
   it("installs a newer release only after the GitHub download is confirmed", async () => {
     await offerRelease();
     const dialog = await screen.findByRole("dialog", { name: "Install OxiTide 0.3.0?" });
-    expect(dialog.textContent).toContain("github.com/Zephulbr/OxiTide");
+    expect(dialog.textContent).toContain("github.com/shikiwoo/OxiTide-Electron");
     expect(mocks.api.installUpdate).not.toHaveBeenCalled();
     await fireEvent.click(within(dialog).getByRole("button", { name: "Download and install" }));
     expect(mocks.api.installUpdate).toHaveBeenCalledOnce();

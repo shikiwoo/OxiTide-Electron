@@ -1086,7 +1086,7 @@
   "updates.downloadingPercent": "Letöltés: {percent}% – az OxiTide a befejezéskor újraindul.",
   "updates.download": "Frissítés letöltése",
   "updates.confirmTitle": "Telepíted az OxiTide {version} verzióját?",
-  "updates.confirmMessage": "Az OxiTide letölti ezt a verziót a GitHub-kiadásai közül (github.com/Zephulbr/OxiTide), ellenőrzi az aláírását, majd futtatja a telepítőt és újraindul. Amíg nem erősíted meg, semmi sem töltődik le.",
+  "updates.confirmMessage": "Az OxiTide letölti ezt a verziót a GitHub-kiadásai közül (github.com/shikiwoo/OxiTide-Electron), ellenőrzi az aláírását, majd futtatja a telepítőt és újraindul. Amíg nem erősíted meg, semmi sem töltődik le.",
   "catjam.coat.white": "Fehér",
   "catjam.coat.black": "Fekete",
   "catjam.coat.ginger": "Vörös cirmos",

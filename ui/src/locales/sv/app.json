@@ -1086,7 +1086,7 @@
   "updates.downloadingPercent": "Laddar ned {percent} % – OxiTide startas om när det är klart.",
   "updates.download": "Nedladdning av uppdatering",
   "updates.confirmTitle": "Installera OxiTide {version}?",
-  "updates.confirmMessage": "OxiTide laddar ned den här versionen från sina GitHub-utgåvor (github.com/Zephulbr/OxiTide), kontrollerar signaturen och kör sedan installationsprogrammet och startar om. Inget laddas ned förrän du bekräftar.",
+  "updates.confirmMessage": "OxiTide laddar ned den här versionen från sina GitHub-utgåvor (github.com/shikiwoo/OxiTide-Electron), kontrollerar signaturen och kör sedan installationsprogrammet och startar om. Inget laddas ned förrän du bekräftar.",
   "catjam.coat.white": "Vit",
   "catjam.coat.black": "Svart",
   "catjam.coat.ginger": "Röd tabby",

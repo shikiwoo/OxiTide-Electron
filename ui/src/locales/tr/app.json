@@ -1086,7 +1086,7 @@
   "updates.downloadingPercent": "İndiriliyor: %{percent} — bittiğinde OxiTide yeniden başlar.",
   "updates.download": "Güncelleme indirmesi",
   "updates.confirmTitle": "OxiTide {version} yüklensin mi?",
-  "updates.confirmMessage": "OxiTide bu sürümü GitHub sürümlerinden (github.com/Zephulbr/OxiTide) indirir, imzasını doğrular, ardından yükleyiciyi çalıştırıp yeniden başlar. Sen onaylayana kadar hiçbir şey indirilmez.",
+  "updates.confirmMessage": "OxiTide bu sürümü GitHub sürümlerinden (github.com/shikiwoo/OxiTide-Electron) indirir, imzasını doğrular, ardından yükleyiciyi çalıştırıp yeniden başlar. Sen onaylayana kadar hiçbir şey indirilmez.",
   "catjam.coat.white": "Beyaz",
   "catjam.coat.black": "Siyah",
   "catjam.coat.ginger": "Kızıl tekir",

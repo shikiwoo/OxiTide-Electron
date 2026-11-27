@@ -1086,7 +1086,7 @@
   "updates.downloadingPercent": "Wird heruntergeladen: {percent} % – OxiTide startet danach neu.",
   "updates.download": "Update-Download",
   "updates.confirmTitle": "OxiTide {version} installieren?",
-  "updates.confirmMessage": "OxiTide lädt diese Version aus seinen GitHub-Releases (github.com/Zephulbr/OxiTide) herunter, prüft ihre Signatur, führt dann das Installationsprogramm aus und startet neu. Erst nach deiner Bestätigung wird etwas heruntergeladen.",
+  "updates.confirmMessage": "OxiTide lädt diese Version aus seinen GitHub-Releases (github.com/shikiwoo/OxiTide-Electron) herunter, prüft ihre Signatur, führt dann das Installationsprogramm aus und startet neu. Erst nach deiner Bestätigung wird etwas heruntergeladen.",
   "catjam.coat.white": "Weiß",
   "catjam.coat.black": "Schwarz",
   "catjam.coat.ginger": "Rot getigert",

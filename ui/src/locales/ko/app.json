@@ -1086,7 +1086,7 @@
   "updates.downloadingPercent": "{percent}% 다운로드 중 — 완료되면 OxiTide가 다시 시작됩니다.",
   "updates.download": "업데이트 다운로드",
   "updates.confirmTitle": "OxiTide {version} 버전을 설치할까요?",
-  "updates.confirmMessage": "OxiTide가 GitHub 릴리스(github.com/Zephulbr/OxiTide)에서 이 버전을 다운로드하고 서명을 확인한 다음 설치 프로그램을 실행하고 다시 시작합니다. 확인하기 전에는 아무것도 다운로드되지 않습니다.",
+  "updates.confirmMessage": "OxiTide가 GitHub 릴리스(github.com/shikiwoo/OxiTide-Electron)에서 이 버전을 다운로드하고 서명을 확인한 다음 설치 프로그램을 실행하고 다시 시작합니다. 확인하기 전에는 아무것도 다운로드되지 않습니다.",
   "catjam.coat.white": "흰색",
   "catjam.coat.black": "검정",
   "catjam.coat.ginger": "치즈 태비",

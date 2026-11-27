@@ -2,8 +2,10 @@ name: macOS app
 
 # Fork-only macOS port: builds the regular Tauri shell (WKWebView scrolls
 # fine, so the Electron shell isn't needed) as a universal .dmg (Apple
-# Silicon + Intel). tauri.macos.conf.json is merged in automatically;
-# tauri.fork.conf.json points the updater at this repository.
+# Silicon + Intel). tauri.macos.conf.json is merged in automatically. The
+# macOS build doesn't self-update (updater.rs); users download the next .dmg.
+# appimage.yml calls this for an electron-v* tag and attaches the .dmg to the
+# release.
 # Unsigned: on first launch macOS says the app is damaged; clear the
 # quarantine flag with `xattr -cr /Applications/OxiTide.app`.
 # Runs on pushes to the macos-port branch (a manual run needs the file on the
@@ -20,6 +22,7 @@ on:
         description: Skip the .dmg build; run clippy and the tests only
         type: boolean
         default: false
+  workflow_call:
 
 permissions:
   contents: read
@@ -65,7 +68,7 @@ jobs:
 
       - name: Build the app
         if: env.TESTS_ONLY != 'true'
-        run: npm --prefix ui run app:build -- --config crates/oxitide-app/tauri.fork.conf.json --target universal-apple-darwin --bundles app,dmg
+        run: npm --prefix ui run app:build -- --target universal-apple-darwin --bundles app,dmg
 
       - uses: actions/upload-artifact@v7
         if: env.TESTS_ONLY != 'true'
