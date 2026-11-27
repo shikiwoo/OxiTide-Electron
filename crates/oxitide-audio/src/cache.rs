@@ -676,6 +676,18 @@ impl TrackCache {
         }
     }
 
+    /// Protects the committed entries of a track that is about to restart
+    /// (a seek ends the session before the next one protects its key), and
+    /// returns the keys to `unprotect` once the new stream holds its own.
+    /// Memory mode only: it evicts on every unprotect, while the disk cache
+    /// never evicts in that gap.
+    pub fn hold_track(&self, track_id: u64, quality: Quality) -> Vec<CacheKey> {
+        match self {
+            Self::Disk(_) => Vec::new(),
+            Self::Memory(memory) => memory.protect_track(track_id, quality),
+        }
+    }
+
     pub fn is_protected(&self, key: &CacheKey) -> bool {
         match self {
             Self::Disk(disk) => disk.is_protected(key),

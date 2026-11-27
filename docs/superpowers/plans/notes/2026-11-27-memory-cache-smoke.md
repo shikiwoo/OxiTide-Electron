@@ -37,7 +37,7 @@
       download, so it is expected to fetch.
 - [ ] A network toggle mid-track (`net-toggle.ps1`: `down`, wait, `up`) is ridden out in place.
 - [ ] A hi-res track longer than the limit (e.g. set the limit to 256 MB) plays to the end, and
-      seeking back within it works.
+      once it has fully downloaded, seeking back within it makes no network fetch.
 - [ ] During all of the above, the cache folder and `%TEMP%` gain no `.part`, `.fmp4` or `spill-*`
       files (both watchers stay quiet).
 - [ ] Lowering the Memory limit while a track plays keeps it playing.
@@ -69,7 +69,7 @@ network toggle, so toggle the link with `nmcli networking off` / `nmcli networki
 
 ## Machine checks (2026-11-27, `oxitide-dev` distrobox, Ubuntu 24.04)
 
-At `4546a8e` (the last code commit; this note's commit changes only docs and the smoke script):
+At `4546a8e` (the last code commit before the final review). After the review fixes (seek hold, scratch accounting) the Rust gates were re-run: fmt and clippy clean, `cargo test --workspace` 1337 passed, 0 failed, `--doc` exit 0; no UI code changed. The `4546a8e` results:
 
 - `cargo fmt --all -- --check`: exit 0.
 - `cargo clippy --workspace --all-targets -- -D warnings`: exit 0.

@@ -315,6 +315,9 @@ struct Inner {
     underrun_count: AtomicU64,
     /// Pending seek; consumed by the worker.
     seek_target: Mutex<Option<PendingSeek>>,
+    /// Cache entries a seek keeps protected across the session restart, until
+    /// the new session's first stream holds its own (`release_seek_hold`).
+    seek_hold: Mutex<Vec<CacheKey>>,
     /// Set while playback waits for the network (`PlaybackState.buffering`).
     reconnect: Mutex<Option<Reconnect>>,
     /// The current track ran out of audio while its download waits for the
@@ -531,6 +534,7 @@ impl Engine {
             underruns: Mutex::new(UnderrunTally::default()),
             underrun_count: AtomicU64::new(0),
             seek_target: Mutex::new(None),
+            seek_hold: Mutex::new(Vec::new()),
             reconnect: Mutex::new(None),
             stream_stalled: AtomicBool::new(false),
             ended: AtomicBool::new(false),
@@ -969,6 +973,17 @@ impl Engine {
                 // external controllers (SMTC clients) can replay a stale
                 // position, and clamping would turn that into a skip.
                 if let Some(item) = current.filter(|item| seek_in_range(item, ms)) {
+                    // The restart drops the playing stream before the next
+                    // session protects the key again: keep the entry
+                    // protected across that gap (the memory cache evicts on
+                    // unprotect). A newer seek's hold replaces this one.
+                    let quality = *self.inner.quality.lock().unwrap();
+                    let held = self.inner.cache.hold_track(item.track_id, quality);
+                    let released =
+                        std::mem::replace(&mut *self.inner.seek_hold.lock().unwrap(), held);
+                    for key in &released {
+                        self.inner.cache.unprotect(key);
+                    }
                     *self.inner.seek_target.lock().unwrap() = Some(PendingSeek {
                         track_id: item.track_id,
                         position_ms: ms,
@@ -2662,6 +2677,19 @@ enum SessionOutcome {
     },
 }
 
+/// Releases a seek's hold (see `Inner::seek_hold`). Called by the current
+/// session once its stream has reported (it holds its own key by then), never
+/// by a superseded one, whose hold belongs to the session that replaces it.
+fn release_seek_hold(inner: &Inner, gen: u64) {
+    if inner.generation.load(Ordering::SeqCst) != gen {
+        return;
+    }
+    let held = std::mem::take(&mut *inner.seek_hold.lock().unwrap());
+    for key in &held {
+        inner.cache.unprotect(key);
+    }
+}
+
 /// Play `first_item` and keep advancing through the queue until it ends, the
 /// generation changes, or a device/stream error occurs.
 #[allow(clippy::too_many_arguments)]
@@ -2726,7 +2754,9 @@ fn run_session(
             return SessionOutcome::Superseded;
         }
         *inner.stream_meta.lock().unwrap() = None;
-        let start = match wait_for_info(inner, &mut stream, gen) {
+        let info = wait_for_info(inner, &mut stream, gen);
+        release_seek_hold(inner, gen);
+        let start = match info {
             Ok(start) => start,
             Err(_) if inner.generation.load(Ordering::SeqCst) != gen => {
                 return SessionOutcome::Superseded;
@@ -9556,6 +9586,70 @@ mod tests {
         );
         assert_eq!(own_spill_files(), spills, "memory mode wrote a spill file");
         assert!(cache.dir().is_none());
+    }
+
+    /// Review fix: a seek ends the session, so the playing stream drops (and
+    /// unprotects) before the new session's stream protects the key again
+    /// after its resolve. Memory mode evicts on unprotect, so an entry over the
+    /// budget (an oversized hi-res track; here any entry, with a 1-byte budget)
+    /// was dropped in that gap and the seek fetched the track again.
+    #[test]
+    fn memory_mode_seek_keeps_an_over_budget_playing_entry() {
+        let (_, files) = fixture_plan();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let output = NullOutput::new();
+        let cache = TrackCache::memory(1);
+        let engine = Engine::new(
+            Arc::new(FakeResolver {
+                plan: cached_plan("mem://tone", 0xabcd),
+            }),
+            {
+                let calls = calls.clone();
+                move || -> Arc<dyn Fetcher> { Arc::new(CountingFetcher { files, calls }) }
+            },
+            Box::new(PacedOutput {
+                inner: output.clone(),
+                per_frame: ABOUT_REAL_TIME,
+            }),
+            Quality::Lossless,
+            cache.clone(),
+            true,
+        );
+        let hits = Arc::new(AtomicUsize::new(0));
+        engine.set_perf_hook({
+            let hits = hits.clone();
+            Arc::new(move |event| {
+                if matches!(event, AudioPerfEvent::CacheHit { track_id: 1 }) {
+                    hits.fetch_add(1, Ordering::SeqCst);
+                }
+            })
+        });
+        let key = CacheKey {
+            track_id: 1,
+            quality: Quality::Lossless,
+            manifest_hash: 0xabcd,
+        };
+
+        engine
+            .handle(EngineCmd::PlayTracks {
+                items: vec![item(1)],
+                start: 0,
+            })
+            .unwrap();
+        wait_for(|| cache.lookup(&key).is_some() && !output.samples().is_empty());
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        engine.handle(EngineCmd::Seek(1000)).unwrap();
+        wait_for(|| hits.load(Ordering::SeqCst) == 1);
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "the seek fetched the playing track again"
+        );
+        assert!(
+            cache.lookup(&key).is_some(),
+            "the playing entry was evicted by the seek"
+        );
     }
 
     /// Serves every URL at once except `mem://tail`, which waits for the gate.

@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuar
 use symphonia::core::io::MediaSource;
 
 use crate::cache::CacheKey;
+use oxitide_tidal::stream::Quality;
 
 /// Size of one storage chunk. Large enough that the allocator hands each
 /// chunk straight to the OS (and returns it when the entry is freed), small
@@ -26,6 +27,22 @@ struct Chunks {
 #[derive(Default)]
 pub struct ChunkBuf {
     inner: RwLock<Chunks>,
+    /// Set on a scratch buffer: the cache whose pending total its bytes count
+    /// toward until the buffer itself drops (its writer and every reader).
+    pending_in: Option<Arc<MemoryCache>>,
+}
+
+impl Drop for ChunkBuf {
+    fn drop(&mut self) {
+        if let Some(cache) = self.pending_in.take() {
+            let len = self
+                .inner
+                .get_mut()
+                .map(|c| c.len)
+                .unwrap_or_else(|e| e.into_inner().len);
+            cache.release_scratch(len);
+        }
+    }
 }
 
 impl ChunkBuf {
@@ -235,8 +252,10 @@ impl MemoryCache {
     pub fn scratch(self: &Arc<Self>) -> MemScratch {
         MemScratch {
             cache: self.clone(),
-            buf: ChunkBuf::new(),
-            bytes: 0,
+            buf: Arc::new(ChunkBuf {
+                inner: RwLock::default(),
+                pending_in: Some(self.clone()),
+            }),
         }
     }
 
@@ -308,6 +327,23 @@ impl MemoryCache {
         if released {
             self.evict_to_fit();
         }
+    }
+
+    /// Adds one holder to every committed entry of `track_id` at `quality`
+    /// (any manifest) and returns their keys, for the caller to unprotect.
+    /// Taken under the `entries` lock, so no write can evict one in between.
+    pub fn protect_track(&self, track_id: u64, quality: Quality) -> Vec<CacheKey> {
+        let entries = lock(&self.entries);
+        let mut protected = lock(&self.protected);
+        let keys: Vec<CacheKey> = entries
+            .keys()
+            .filter(|key| key.track_id == track_id && key.quality == quality)
+            .copied()
+            .collect();
+        for key in &keys {
+            *protected.entry(*key).or_insert(0) += 1;
+        }
+        keys
     }
 
     pub fn is_protected(&self, key: &CacheKey) -> bool {
@@ -452,30 +488,24 @@ impl Drop for MemWriter {
 }
 
 /// A RAM scratch buffer for a run-ahead download that is not cached. Never
-/// published; its bytes count as pending until it drops.
+/// published. Its bytes count as pending for as long as the buffer lives:
+/// the feeder reads a finished download until playback reaches its end, so
+/// the release happens when the last holder drops (see `ChunkBuf`'s `Drop`).
 pub struct MemScratch {
     cache: Arc<MemoryCache>,
     buf: Arc<ChunkBuf>,
-    bytes: u64,
 }
 
 impl MemScratch {
     pub fn write_all(&mut self, data: &[u8]) -> io::Result<()> {
         self.cache.reserve(data.len() as u64);
         self.buf.append(data);
-        self.bytes += data.len() as u64;
         Ok(())
     }
 
     /// The buffer being written, for the feeder to read back.
     pub fn buf(&self) -> Arc<ChunkBuf> {
         self.buf.clone()
-    }
-}
-
-impl Drop for MemScratch {
-    fn drop(&mut self) {
-        self.cache.release_scratch(self.bytes);
     }
 }
 
@@ -711,6 +741,25 @@ mod tests {
         drop(s);
         assert_eq!(cache.pending_bytes(), 0);
         assert_eq!(cache.size_bytes(), 0);
+    }
+
+    /// The feeder keeps reading a finished download's scratch until playback
+    /// reaches its end: those bytes are still RAM in use, so they count until
+    /// the buffer's last holder drops, not when the writer does.
+    #[test]
+    fn scratch_bytes_count_until_the_last_reader_drops() {
+        let cache = MemoryCache::new(1 << 20);
+        let mut s = cache.scratch();
+        s.write_all(&[7; 700]).unwrap();
+        let reader = ChunkReader::new(s.buf());
+        drop(s); // the download finished
+        assert_eq!(
+            cache.pending_bytes(),
+            700,
+            "a finished scratch still in use stopped counting"
+        );
+        assert_eq!(read_all(reader), vec![7u8; 700]);
+        assert_eq!(cache.pending_bytes(), 0);
     }
 
     #[test]
