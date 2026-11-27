@@ -6,6 +6,7 @@
     api,
     SCROBBLE_STATUS_EVENT,
     type AnalyzerStyle,
+    type CacheBackend,
     type CacheStatus,
     type CatjamCoat,
     type Config,
@@ -24,6 +25,7 @@
     type ScrobbleStatusDto,
   } from "../lib/api";
   import { canToggle, queuedLabel, serviceLabel } from "../lib/scrobble";
+  import { cacheControls, clampMemoryMb, MEMORY_MAX_MB, MEMORY_MIN_MB } from "../lib/cacheSettings";
   import ConfirmDialog from "../lib/components/ConfirmDialog.svelte";
   import { trackFlags } from "../lib/trackFlags.svelte";
   import ErrorState from "../lib/components/ErrorState.svelte";
@@ -184,6 +186,10 @@
     const theme: ThemeSetting = `catppuccin-${flavour}`;
     void appearance.setTheme(theme).catch(apply);
   }
+  const CACHE_BACKEND_OPTIONS: { value: CacheBackend; label: string }[] = [
+    { value: "disk", get label() { return t("settings.cacheBackend.disk"); } },
+    { value: "memory", get label() { return t("settings.cacheBackend.memory"); } },
+  ];
   const MODE_OPTIONS: { value: UiMode; label: string }[] = [
     { value: "atmosphere", get label() { return t("settings.opt.mode.atmosphere"); } },
     { value: "instrument", get label() { return t("settings.opt.mode.instrument"); } },
@@ -869,6 +875,21 @@
     api.setCacheMaxSizeMb(clamped).then(refreshCacheStatus).catch(apply);
   }
 
+  function setCacheMemoryMb(mb: number) {
+    if (!config) return;
+    const clamped = clampMemoryMb(mb);
+    config = { ...config, cache: { ...config.cache, memory_max_size_mb: clamped } };
+    api.setCacheMemoryMaxSizeMb(clamped).then(refreshCacheStatus).catch(apply);
+  }
+
+  /// Saved for the next start: the running cache keeps its backend, and the
+  /// restart note shows until then.
+  function setCacheBackend(backend: CacheBackend) {
+    if (!config) return;
+    config = { ...config, cache: { ...config.cache, backend } };
+    api.setCacheBackend(backend).then(refreshCacheStatus).catch(apply);
+  }
+
   function setClearOnExit(enabled: boolean) {
     if (!config) return;
     config = { ...config, cache: { ...config.cache, clear_on_exit: enabled } };
@@ -946,6 +967,12 @@
   }
 
   const cacheUsed = $derived(cacheStatus ? cacheStatus.used_bytes : 0);
+  const cacheUi = $derived(
+    cacheStatus && config ? cacheControls(cacheStatus, config.cache.backend) : null,
+  );
+  const cacheUsageLabel = $derived(
+    cacheStatus?.backend === "memory" ? t("settings.cacheUsage.memoryLabel") : t("settings.cacheUsage.label"),
+  );
   const cacheFraction = $derived(cacheStatus ? usageFraction(cacheUsed, cacheStatus.max_bytes) : 0);
 </script>
 
@@ -1736,8 +1763,26 @@
                 <Button icon="refresh-cw" onclick={refreshCacheStatus}>{t("playlist.refresh")}</Button>
                 <Button variant="danger" icon="trash-2" onclick={clearCache}>{t("settings.clearCache")}</Button>
               {/snippet}
-              {#if cacheStatus}
-                {#if !cacheStatus.usable}
+              {#if cacheStatus && cacheUi}
+                <SettingRow
+                  id="cache-backend" label={t("settings.cacheBackend.label")}
+                  description={t("settings.cacheBackend.description")}
+                >
+                  <Segmented
+                    label={t("settings.cacheBackend.label")}
+                    value={config.cache.backend}
+                    options={CACHE_BACKEND_OPTIONS}
+                    onchange={setCacheBackend}
+                  />
+                </SettingRow>
+                {#if cacheUi.restartNote}
+                  <div class="inset">
+                    <Notice kind="info">{t("settings.cacheBackend.restart")}</Notice>
+                  </div>
+                {/if}
+                {#if !cacheUi.showLocation}
+                  <!-- Memory mode: no folder, so no unusable-dir or fallback warning. -->
+                {:else if !cacheStatus.usable}
                   <div class="inset">
                     <Notice kind="warning">
                       {t("settings.cacheDisabled")}
@@ -1750,12 +1795,12 @@
                     </Notice>
                   </div>
                 {/if}
-                <SettingRow id="cache-usage" label={t("settings.cacheUsage.label")} stacked>
+                <SettingRow id="cache-usage" label={cacheUsageLabel} stacked>
                   <div class="usage">
                     <div
                       class="meter"
                       role="meter"
-                      aria-label={t("settings.cacheUsage.label")}
+                      aria-label={cacheUsageLabel}
                       aria-valuemin="0"
                       aria-valuemax="100"
                       aria-valuenow={Math.round(cacheFraction * 100)}
@@ -1770,26 +1815,45 @@
                   </div>
                 </SettingRow>
                 <SettingRow id="cache-max" label={t("settings.cacheMax.label")} description={t("settings.cacheMax.description")}>
-                  <NumberField
-                    label={t("settings.cacheMaxLabel")}
-                    min={0}
-                    unit={t("settings.unitMb")}
-                    value={config.cache.max_size_mb}
-                    onchange={setCacheMaxMb}
+                  {#if cacheUi.sizeField === "memory"}
+                    <NumberField
+                      label={t("settings.cacheMaxLabel")}
+                      min={MEMORY_MIN_MB}
+                      max={MEMORY_MAX_MB}
+                      unit={t("settings.unitMb")}
+                      value={config.cache.memory_max_size_mb}
+                      onchange={setCacheMemoryMb}
+                    />
+                  {:else}
+                    <NumberField
+                      label={t("settings.cacheMaxLabel")}
+                      min={0}
+                      unit={t("settings.unitMb")}
+                      value={config.cache.max_size_mb}
+                      onchange={setCacheMaxMb}
+                    />
+                  {/if}
+                </SettingRow>
+                {#if cacheUi.showClearOnExit}
+                  <ToggleRow
+                    id="cache-clear-exit" label={t("settings.cacheClearExit.label")}
+                    checked={config.cache.clear_on_exit}
+                    onchange={setClearOnExit}
                   />
-                </SettingRow>
-                <ToggleRow
-                  id="cache-clear-exit" label={t("settings.cacheClearExit.label")}
-                  checked={config.cache.clear_on_exit}
-                  onchange={setClearOnExit}
-                />
-                <SettingRow
-                  id="cache-location" label={t("settings.cacheLocation.label")}
-                  description={t("settings.cacheLocation.description")}
-                  stacked
-                >
-                  <code class="path">{cacheStatus.dir}</code>
-                </SettingRow>
+                {/if}
+                {#if cacheUi.showLocation}
+                  <SettingRow
+                    id="cache-location" label={t("settings.cacheLocation.label")}
+                    description={t("settings.cacheLocation.description")}
+                    stacked
+                  >
+                    <code class="path">{cacheStatus.dir}</code>
+                  </SettingRow>
+                {:else}
+                  <SettingRow id="cache-location" label={t("settings.cacheLocation.label")}>
+                    <span class="muted">{t("settings.cacheLocation.memory")}</span>
+                  </SettingRow>
+                {/if}
               {:else}
                 <SettingRow label={t("settings.cacheStatusUnavailable.label")} />
               {/if}

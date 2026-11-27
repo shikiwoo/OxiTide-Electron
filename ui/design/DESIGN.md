@@ -224,6 +224,16 @@ port, the footer's firewall line says so instead of the generic hint. Audio devi
 `sysdefault:` entries read "<card> (ALSA default, may resample)", apart from the
 "(direct hardware)" entry for the same card.
 
+Storage → Cache, storage choice (2026-11-27, spec `2026-11-27-oxitide-memory-cache-design.md`):
+the card opens with a `Segmented` row, **Cache storage** (Disk / Memory; Memory keeps cached
+tracks in RAM only and its help line says offline playback needs the disk cache). The choice
+applies at the next start, so while it differs from the running backend an info `Notice` inset
+below the row says it takes effect after a restart. The size field follows the chosen backend:
+Memory has its own 256–4096 MB limit, separate from the disk one. While the memory cache runs
+there is no folder, so the clear-on-exit toggle and the folder warnings are hidden, the Location
+row reads "In memory", and the usage row is labelled "Memory usage". Which controls show is
+decided in `lib/cacheSettings.ts`. No new styling.
+
 Streaming quality restores **Low** with the hint **HE-AAC 96 kbps** in the existing
 Select, alongside High, Lossless (still the default), and Max. Saved `low` preferences
 are preserved on load. Compact badges stay **AAC** for served Low streams; detailed
