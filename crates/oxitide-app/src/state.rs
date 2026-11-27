@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use oxitide_audio::cache::DiskCache;
+use oxitide_audio::cache::TrackCache;
 use oxitide_audio::engine::Engine;
 use oxitide_tidal::client::TidalClient;
 use oxitide_tidal::pkce::Pkce;
@@ -43,7 +43,7 @@ pub struct AppState {
     /// unmaximized window. GTK can report a stale size after a hide, so this
     /// is what a show from the tray re-applies and what close saves.
     pub last_size: Mutex<Option<(u32, u32)>>,
-    pub cache: Mutex<Option<Arc<DiskCache>>>,
+    pub cache: Mutex<Option<Arc<TrackCache>>>,
     pub artwork: Mutex<Option<Arc<ArtworkService>>>,
     pub lyrics: Mutex<Option<Arc<LyricsService>>>,
     pub scrobbler: Mutex<Option<Arc<ScrobblerService>>>,
@@ -174,11 +174,11 @@ impl AppState {
         self.pre_mini.lock().unwrap().take()
     }
 
-    pub fn set_cache(&self, cache: Arc<DiskCache>) {
+    pub fn set_cache(&self, cache: Arc<TrackCache>) {
         *self.cache.lock().unwrap() = Some(cache);
     }
 
-    pub fn cache(&self) -> Option<Arc<DiskCache>> {
+    pub fn cache(&self) -> Option<Arc<TrackCache>> {
         self.cache.lock().unwrap().clone()
     }
 

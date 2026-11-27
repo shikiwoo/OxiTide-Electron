@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use oxitide_audio::cache::DiskCache;
+use oxitide_audio::cache::TrackCache;
 use oxitide_audio::devices::DeviceGroup;
 use oxitide_audio::dsp::{DspSettings, TransitionStyle};
 use oxitide_audio::engine::{Engine, EngineCmd, EngineEvent};
@@ -86,7 +86,7 @@ pub struct TrackPageDto {
     pub limit: u32,
 }
 
-fn require_cache(state: &State<'_, AppState>) -> Result<Arc<DiskCache>, String> {
+fn require_cache(state: &State<'_, AppState>) -> Result<Arc<TrackCache>, String> {
     state.cache().ok_or_else(|| "cache unavailable".to_string())
 }
 
@@ -419,7 +419,7 @@ fn replace_player(
     state: &AppState,
     client: TidalClient,
     config: &Config,
-    cache: Arc<DiskCache>,
+    cache: Arc<TrackCache>,
 ) -> Result<Player, String> {
     if let Some(old) = state.player() {
         old.engine.shutdown();
@@ -434,7 +434,7 @@ fn build_player(
     app: &tauri::AppHandle,
     client: TidalClient,
     config: &Config,
-    cache: Arc<DiskCache>,
+    cache: Arc<TrackCache>,
 ) -> Result<Player, String> {
     let resolver = crate::player::TidalResolver::new(client).map_err(|e| e.to_string())?;
     let engine = Engine::new(
@@ -2906,7 +2906,10 @@ pub fn get_audio_status(state: State<'_, AppState>) -> Result<AudioStatusDto, St
 pub fn get_cache_status(state: State<'_, AppState>) -> Result<CacheStatusDto, String> {
     let cache = require_cache(&state)?;
     Ok(CacheStatusDto {
-        dir: cache.dir().display().to_string(),
+        dir: cache
+            .dir()
+            .map(|dir| dir.display().to_string())
+            .unwrap_or_default(),
         used_bytes: cache.size_bytes(),
         pending_bytes: cache.pending_bytes(),
         max_bytes: cache.max_bytes(),

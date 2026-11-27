@@ -6,8 +6,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
-use crate::cache::CacheWriter;
+use crate::cache::{SpillReader, TrackWriter};
 use crate::error::{Error, Result};
+use crate::mem_cache::{ChunkReader, MemScratch};
 use crate::retry::Backoff;
 use crate::source::StreamPlan;
 
@@ -354,7 +355,7 @@ pub fn download(
     buffer: Arc<StreamBuffer>,
     fetcher: Arc<dyn Fetcher>,
     plan: StreamPlan,
-    cache_writer: Option<CacheWriter>,
+    cache_writer: Option<TrackWriter>,
 ) {
     download_urls(&buffer, fetcher.as_ref(), plan_urls(&plan), cache_writer);
 }
@@ -373,7 +374,7 @@ fn download_urls(
     buffer: &StreamBuffer,
     fetcher: &dyn Fetcher,
     urls: Vec<String>,
-    cache_writer: Option<CacheWriter>,
+    cache_writer: Option<TrackWriter>,
 ) {
     let mut writer = cache_writer;
     for url in urls {
@@ -501,15 +502,21 @@ impl Drop for ScratchFile {
 /// Where a run-ahead download lands before the feeder reads it back.
 pub enum AheadSink {
     /// The whole track, published to the cache as soon as it is complete.
-    Cache(CacheWriter),
+    Cache(TrackWriter),
     Scratch(ScratchFile),
+    /// Memory mode's scratch: the same role as `Scratch`, held in RAM.
+    MemScratch(MemScratch),
 }
 
 impl AheadSink {
-    fn path(&self) -> &Path {
+    /// A reader for the feeder over the bytes written so far.
+    fn reader(&self) -> io::Result<SpillReader> {
         match self {
-            AheadSink::Cache(writer) => writer.part_path(),
-            AheadSink::Scratch(scratch) => &scratch.path,
+            AheadSink::Cache(writer) => writer.spill_reader(),
+            AheadSink::Scratch(scratch) => File::open(&scratch.path).map(SpillReader::File),
+            AheadSink::MemScratch(scratch) => {
+                Ok(SpillReader::Memory(ChunkReader::new(scratch.buf())))
+            }
         }
     }
 
@@ -521,6 +528,7 @@ impl AheadSink {
                 .as_mut()
                 .ok_or_else(|| io::Error::other("scratch file closed"))?
                 .write_all(data),
+            AheadSink::MemScratch(scratch) => scratch.write_all(data),
         }
     }
 
@@ -587,13 +595,13 @@ pub fn download_ahead(
     ticket: AheadTicket,
     refresh: Option<Refresh>,
 ) {
-    let reader = match File::open(sink.path()) {
+    let reader = match sink.reader() {
         Ok(reader) => reader,
         Err(e) => {
             tracing::warn!("download-ahead spill unreadable ({e}); streaming directly");
             let writer = match sink {
                 AheadSink::Cache(writer) => Some(writer),
-                AheadSink::Scratch(_) => None,
+                AheadSink::Scratch(_) | AheadSink::MemScratch(_) => None,
             };
             return download(buffer, fetcher, plan, writer);
         }
@@ -746,7 +754,7 @@ fn refresh_urls(refresh: &Refresh, plan: &StreamPlan, expected: usize) -> Result
     Ok(urls)
 }
 
-fn feed(buffer: &StreamBuffer, mut reader: File, progress: &Progress) {
+fn feed(buffer: &StreamBuffer, mut reader: SpillReader, progress: &Progress) {
     let mut chunk = vec![0u8; FEED_CHUNK];
     loop {
         buffer.wait_room(MAX_BUFFERED_BYTES);
@@ -785,7 +793,7 @@ fn feed(buffer: &StreamBuffer, mut reader: File, progress: &Progress) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cache::{CacheKey, DiskCache};
+    use crate::cache::{CacheKey, CacheSource, TrackCache};
     use crate::source::Segment;
     use oxitide_tidal::stream::Quality;
     use std::path::PathBuf;
@@ -801,6 +809,12 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    fn entry_bytes(mut source: CacheSource) -> Vec<u8> {
+        let mut out = Vec::new();
+        source.read_to_end(&mut out).unwrap();
+        out
     }
 
     fn cache_key() -> CacheKey {
@@ -840,7 +854,7 @@ mod tests {
     #[test]
     fn download_tees_parts_into_the_cache_writer() {
         let dir = temp_dir();
-        let cache = DiskCache::new(dir.clone(), 1 << 20);
+        let cache = TrackCache::disk(dir.clone(), 1 << 20);
         let key = cache_key();
         let writer = cache.begin_write(&key).unwrap();
         let fetcher = Arc::new(
@@ -852,9 +866,9 @@ mod tests {
         let buf = StreamBuffer::new();
         download(buf.clone(), fetcher, small_plan(), Some(writer));
         assert_eq!(buf.total_pushed(), 9);
-        let path = cache.lookup(&key).expect("committed entry");
-        assert_eq!(std::fs::metadata(&path).unwrap().len(), 9);
-        assert_eq!(std::fs::read(&path).unwrap(), b"INITAAABB");
+        let entry = entry_bytes(cache.lookup(&key).expect("committed entry"));
+        assert_eq!(entry.len(), 9);
+        assert_eq!(entry, b"INITAAABB");
         assert_eq!(cache.size_bytes(), 9);
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -862,7 +876,7 @@ mod tests {
     #[test]
     fn download_aborts_the_writer_on_failure() {
         let dir = temp_dir();
-        let cache = DiskCache::new(dir.clone(), 1 << 20);
+        let cache = TrackCache::disk(dir.clone(), 1 << 20);
         let key = cache_key();
         let writer = cache.begin_write(&key).unwrap();
         let fetcher = Arc::new(MapFetcher::default());
@@ -1120,7 +1134,7 @@ mod tests {
     #[test]
     fn download_ahead_fetches_the_whole_track_without_a_consumer() {
         let dir = temp_dir();
-        let cache = DiskCache::new(dir.clone(), 1 << 30);
+        let cache = TrackCache::disk(dir.clone(), 1 << 30);
         let key = cache_key();
         let writer = cache.begin_write(&key).unwrap();
         let gate = Arc::new(AheadGate::default());
@@ -1253,7 +1267,7 @@ mod tests {
     #[test]
     fn a_cancelled_download_ahead_aborts_its_cache_entry() {
         let dir = temp_dir();
-        let cache = DiskCache::new(dir.clone(), 1 << 30);
+        let cache = TrackCache::disk(dir.clone(), 1 << 30);
         let key = cache_key();
         let writer = cache.begin_write(&key).unwrap();
         let gate = Arc::new(AheadGate::default());

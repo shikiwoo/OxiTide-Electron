@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use crate::automix::{self, Clip, Rendered, TransitionKind, TransitionPlan, TransitionReport};
 use crate::beat::{self, BeatClock, BeatTap, Window as BeatWindow};
-use crate::cache::{CacheKey, DiskCache};
+use crate::cache::{CacheKey, CacheSource, TrackCache};
 use crate::decode::{PcmBuffer, PcmFormat, PcmSink, StreamInfo};
 use crate::dsp::{
     extend_normalized, replay_gain_linear, CrossfadeSettings, DspSettings, GainRide, MixShape,
@@ -240,7 +240,7 @@ struct Inner {
     queue: Mutex<Queue>,
     resolver: Arc<dyn StreamResolver>,
     fetcher: OnceLock<Arc<dyn Fetcher>>,
-    cache: Arc<DiskCache>,
+    cache: Arc<TrackCache>,
     /// Which download may run ahead of its decoder (see `fetch::AheadGate`).
     ahead_gate: Arc<AheadGate>,
     quality: Mutex<Quality>,
@@ -486,7 +486,7 @@ impl Engine {
         make_fetcher: impl FnOnce() -> Arc<dyn Fetcher> + Send + 'static,
         mut output: Box<dyn AudioOutput>,
         quality: Quality,
-        cache: Arc<DiskCache>,
+        cache: Arc<TrackCache>,
         allow_fallback: bool,
     ) -> Self {
         let volume_control = Arc::new(VolumeControl::default());
@@ -1147,7 +1147,7 @@ struct TrackStream {
     item: QueueItem,
     rx: Receiver<Result<StreamEvent>>,
     buffer: Arc<StreamBuffer>,
-    cache: Arc<DiskCache>,
+    cache: Arc<TrackCache>,
     /// The cache key this stream protects while it is alive, once resolved.
     cache_key: Arc<Mutex<Option<CacheKey>>>,
     /// Events pre-read from `rx` while this stream waits as the prefetch (the
@@ -1442,21 +1442,21 @@ fn decode_track(
     }
     match cache_key {
         Some(key) => match inner.cache.lookup(&key) {
-            Some(path) => {
+            Some(source) => {
                 fire_perf(
                     &inner,
                     AudioPerfEvent::CacheHit {
                         track_id: item.track_id,
                     },
                 );
-                let result = decode_from_file(
+                let result = decode_from_cache(
                     &inner,
                     &item,
                     mode,
                     generation,
                     seek_ms,
                     &tx,
-                    &path,
+                    source,
                     &plan,
                     plan.needs_he_aac(),
                 );
@@ -1554,17 +1554,20 @@ fn play_cached_offline(
             track_id: item.track_id,
         },
     );
-    let result = decode_from_file(
-        inner,
-        item,
-        mode,
-        generation,
-        seek_ms,
-        tx,
-        &path,
-        &plan,
-        legacy_low || plan.needs_he_aac(),
-    );
+    let result = match CacheSource::open_file(&path) {
+        Ok(source) => decode_from_cache(
+            inner,
+            item,
+            mode,
+            generation,
+            seek_ms,
+            tx,
+            source,
+            &plan,
+            legacy_low || plan.needs_he_aac(),
+        ),
+        Err(e) => Err((e.into(), false)),
+    };
     if let Err((e, _)) = &result {
         if inner.generation.load(Ordering::SeqCst) == generation && !matches!(e, Error::Output(_)) {
             tracing::warn!(
@@ -1637,10 +1640,9 @@ fn decode_from_network(
     let sink = match writer {
         Some(writer) => Some(AheadSink::Cache(writer)),
         None => {
-            let dir = if inner.cache.usable() {
-                inner.cache.dir().to_path_buf()
-            } else {
-                std::env::temp_dir()
+            let dir = match inner.cache.dir() {
+                Some(dir) if inner.cache.usable() => dir.to_path_buf(),
+                _ => std::env::temp_dir(),
             };
             match ScratchFile::create(&dir) {
                 Ok(scratch) => Some(AheadSink::Scratch(scratch)),
@@ -1720,19 +1722,18 @@ fn decode_from_network(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn decode_from_file(
+fn decode_from_cache(
     inner: &Arc<Inner>,
     item: &QueueItem,
     mode: OutputMode,
     generation: u64,
     seek_ms: Option<u64>,
     tx: &SyncSender<Result<StreamEvent>>,
-    path: &std::path::Path,
+    source: CacheSource,
     plan: &StreamPlan,
     he_aac: bool,
 ) -> std::result::Result<(), (Error, bool)> {
-    let len = std::fs::metadata(path).map(|meta| meta.len()).unwrap_or(0);
-    let source = crate::demux::FileSource::open(path).map_err(|e| (e.into(), false))?;
+    let len = source.len();
     let total_bytes = Arc::new(move || len) as Arc<dyn Fn() -> u64 + Send + Sync>;
     decode_source(
         inner.clone(),
@@ -3907,7 +3908,7 @@ fn worker_main(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cache::{CacheKey, DiskCache};
+    use crate::cache::{CacheKey, CacheSource, TrackCache};
     use crate::output::NullOutput;
     use crate::source::Segment;
     use std::collections::HashMap;
@@ -4110,14 +4111,21 @@ mod tests {
         }
     }
 
-    fn test_cache() -> Arc<DiskCache> {
+    fn entry_bytes(mut source: CacheSource) -> Vec<u8> {
+        use std::io::Read;
+        let mut out = Vec::new();
+        source.read_to_end(&mut out).unwrap();
+        out
+    }
+
+    fn test_cache() -> Arc<TrackCache> {
         static CACHE_COUNTER: AtomicU32 = AtomicU32::new(0);
         let dir = std::env::temp_dir().join(format!(
             "oxitide-engine-cache-{}-{}",
             std::process::id(),
             CACHE_COUNTER.fetch_add(1, Ordering::SeqCst)
         ));
-        DiskCache::new(dir, 64 * 1024 * 1024)
+        TrackCache::disk(dir, 64 * 1024 * 1024)
     }
 
     fn build_engine(
@@ -4690,6 +4698,7 @@ mod tests {
             assert!(
                 !cache
                     .dir()
+                    .unwrap()
                     .join(format!("{}.meta", key.file_name()))
                     .exists(),
                 "the corrupt entry's sidecar must be evicted"
@@ -4751,6 +4760,7 @@ mod tests {
             );
             assert!(cache
                 .dir()
+                .unwrap()
                 .join(format!("{}.meta", key.file_name()))
                 .is_file());
             let (_, replay) = collect_track(&engine, None);
@@ -4897,12 +4907,20 @@ mod tests {
                 );
                 producer.join().unwrap();
                 cache.unprotect(&key);
-                let path = cache
-                    .lookup(&key)
-                    .expect("cancellation must keep the healthy entry");
-                assert_eq!(std::fs::read(path).unwrap(), clean);
+                let entry = entry_bytes(
+                    cache
+                        .lookup(&key)
+                        .expect("cancellation must keep the healthy entry"),
+                );
+                assert_eq!(entry, clean);
                 assert_eq!(
-                    std::fs::read(cache.dir().join(format!("{}.meta", key.file_name()))).unwrap(),
+                    std::fs::read(
+                        cache
+                            .dir()
+                            .unwrap()
+                            .join(format!("{}.meta", key.file_name()))
+                    )
+                    .unwrap(),
                     meta
                 );
                 let (_, replay) = collect_track(&engine, None);
@@ -9468,7 +9486,7 @@ mod tests {
             .lookup(&key)
             .expect("the corrupt entry was not replaced");
         assert_eq!(
-            std::fs::metadata(replaced).unwrap().len(),
+            entry_bytes(replaced).len() as u64,
             files["mem://tone"].len() as u64,
             "the refetched bytes were not re-cached"
         );

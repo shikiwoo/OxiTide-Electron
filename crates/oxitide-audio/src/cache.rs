@@ -4,13 +4,17 @@
 
 use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use oxitide_tidal::stream::Quality;
+use symphonia::core::io::MediaSource;
+
+use crate::demux::FileSource;
+use crate::mem_cache::{ChunkReader, MemWriter, MemoryCache};
 
 /// `.part` files older than this are stale temporary downloads.
 const STALE_PART_AGE: Duration = Duration::from_secs(3600);
@@ -510,6 +514,285 @@ impl Drop for CacheWriter {
         // A writer that was neither committed nor explicitly aborted (e.g. a
         // dropped download) must not leave its temp file or in-flight key.
         self.finish_abort();
+    }
+}
+
+/// Which backend a [`TrackCache`] runs on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CacheBackend {
+    Disk,
+    Memory,
+}
+
+/// The track cache the engine and the app hold: the disk cache, or the
+/// memory cache in which no audio bytes touch the disk. Callers never branch
+/// on the backend; the few calls that only make sense on disk
+/// (`find_offline`, `cleanup`, `dir`) are no-ops or `None` in Memory mode.
+pub enum TrackCache {
+    Disk(Arc<DiskCache>),
+    Memory(Arc<MemoryCache>),
+}
+
+impl TrackCache {
+    pub fn disk(dir: PathBuf, max_bytes: u64) -> Arc<Self> {
+        Arc::new(Self::Disk(DiskCache::new(dir, max_bytes)))
+    }
+
+    pub fn memory(max_bytes: u64) -> Arc<Self> {
+        Arc::new(Self::Memory(MemoryCache::new(max_bytes)))
+    }
+
+    pub fn backend(&self) -> CacheBackend {
+        match self {
+            Self::Disk(_) => CacheBackend::Disk,
+            Self::Memory(_) => CacheBackend::Memory,
+        }
+    }
+
+    pub fn usable(&self) -> bool {
+        match self {
+            Self::Disk(disk) => disk.usable(),
+            Self::Memory(_) => true,
+        }
+    }
+
+    /// The cache folder; `None` in Memory mode.
+    pub fn dir(&self) -> Option<&Path> {
+        match self {
+            Self::Disk(disk) => Some(disk.dir()),
+            Self::Memory(_) => None,
+        }
+    }
+
+    /// A reader over the committed entry; bumps it in the LRU order.
+    pub fn lookup(&self, key: &CacheKey) -> Option<CacheSource> {
+        match self {
+            Self::Disk(disk) => {
+                let path = disk.lookup(key)?;
+                match CacheSource::open_file(&path) {
+                    Ok(source) => Some(source),
+                    Err(e) => {
+                        tracing::warn!("cache entry {} cannot be opened: {e}", key.file_name());
+                        None
+                    }
+                }
+            }
+            Self::Memory(memory) => memory.lookup(key).map(CacheSource::Memory),
+        }
+    }
+
+    /// See [`DiskCache::find_offline`]. Memory mode keeps nothing across
+    /// restarts, so there is never an offline copy.
+    pub fn find_offline(
+        &self,
+        track_id: u64,
+        quality: Quality,
+    ) -> Option<(CacheKey, PathBuf, Option<Vec<u8>>)> {
+        match self {
+            Self::Disk(disk) => disk.find_offline(track_id, quality),
+            Self::Memory(_) => None,
+        }
+    }
+
+    pub fn begin_write(&self, key: &CacheKey) -> Option<TrackWriter> {
+        match self {
+            Self::Disk(disk) => disk.begin_write(key).map(TrackWriter::Disk),
+            Self::Memory(memory) => memory.begin_write(key).map(TrackWriter::Memory),
+        }
+    }
+
+    pub fn remove(&self, key: &CacheKey) {
+        match self {
+            Self::Disk(disk) => disk.remove(key),
+            Self::Memory(memory) => memory.remove(key),
+        }
+    }
+
+    pub fn clear(&self) {
+        match self {
+            Self::Disk(disk) => disk.clear(),
+            Self::Memory(memory) => memory.clear(),
+        }
+    }
+
+    /// The startup sweep; a no-op in Memory mode, which leaves the disk
+    /// cache folder untouched.
+    pub fn cleanup(&self) {
+        match self {
+            Self::Disk(disk) => disk.cleanup(),
+            Self::Memory(_) => {}
+        }
+    }
+
+    pub fn set_max_bytes(&self, max_bytes: u64) {
+        match self {
+            Self::Disk(disk) => disk.set_max_bytes(max_bytes),
+            Self::Memory(memory) => memory.set_max_bytes(max_bytes),
+        }
+    }
+
+    pub fn max_bytes(&self) -> u64 {
+        match self {
+            Self::Disk(disk) => disk.max_bytes(),
+            Self::Memory(memory) => memory.max_bytes(),
+        }
+    }
+
+    pub fn size_bytes(&self) -> u64 {
+        match self {
+            Self::Disk(disk) => disk.size_bytes(),
+            Self::Memory(memory) => memory.size_bytes(),
+        }
+    }
+
+    pub fn pending_bytes(&self) -> u64 {
+        match self {
+            Self::Disk(disk) => disk.pending_bytes(),
+            Self::Memory(memory) => memory.pending_bytes(),
+        }
+    }
+
+    pub fn protect(&self, key: &CacheKey) {
+        match self {
+            Self::Disk(disk) => disk.protect(key),
+            Self::Memory(memory) => memory.protect(key),
+        }
+    }
+
+    pub fn unprotect(&self, key: &CacheKey) {
+        match self {
+            Self::Disk(disk) => disk.unprotect(key),
+            Self::Memory(memory) => memory.unprotect(key),
+        }
+    }
+
+    pub fn is_protected(&self, key: &CacheKey) -> bool {
+        match self {
+            Self::Disk(disk) => disk.is_protected(key),
+            Self::Memory(memory) => memory.is_protected(key),
+        }
+    }
+}
+
+/// A cache hit to decode from: the entry's file, or its bytes in RAM.
+pub enum CacheSource {
+    File(FileSource),
+    Memory(ChunkReader),
+}
+
+impl CacheSource {
+    pub fn open_file(path: &Path) -> io::Result<Self> {
+        FileSource::open(path).map(Self::File)
+    }
+
+    /// The entry's size in bytes.
+    pub fn len(&self) -> u64 {
+        self.byte_len().unwrap_or(0)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl Read for CacheSource {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::File(file) => file.read(out),
+            Self::Memory(memory) => memory.read(out),
+        }
+    }
+}
+
+impl Seek for CacheSource {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        match self {
+            Self::File(file) => file.seek(pos),
+            Self::Memory(memory) => memory.seek(pos),
+        }
+    }
+}
+
+impl MediaSource for CacheSource {
+    fn is_seekable(&self) -> bool {
+        true
+    }
+
+    fn byte_len(&self) -> Option<u64> {
+        match self {
+            Self::File(file) => file.byte_len(),
+            Self::Memory(memory) => memory.byte_len(),
+        }
+    }
+}
+
+/// An in-flight whole-track cache write on either backend.
+pub enum TrackWriter {
+    Disk(CacheWriter),
+    Memory(MemWriter),
+}
+
+impl TrackWriter {
+    /// The stream sidecar; Memory mode has no offline playback to serve, so
+    /// it is ignored there.
+    pub fn set_meta(&mut self, meta: Vec<u8>) {
+        match self {
+            Self::Disk(writer) => writer.set_meta(meta),
+            Self::Memory(_) => {}
+        }
+    }
+
+    pub fn write_all(&mut self, data: &[u8]) -> io::Result<()> {
+        match self {
+            Self::Disk(writer) => writer.write_all(data),
+            Self::Memory(writer) => writer.write_all(data),
+        }
+    }
+
+    pub fn bytes(&self) -> u64 {
+        match self {
+            Self::Disk(writer) => writer.bytes(),
+            Self::Memory(writer) => writer.bytes(),
+        }
+    }
+
+    pub fn commit(self) {
+        match self {
+            Self::Disk(writer) => writer.commit(),
+            Self::Memory(writer) => writer.commit(),
+        }
+    }
+
+    pub fn abort(self) {
+        match self {
+            Self::Disk(writer) => writer.abort(),
+            Self::Memory(writer) => writer.abort(),
+        }
+    }
+
+    /// A reader over the bytes written so far, for the download-ahead
+    /// feeder: the `.part` file on disk, the in-flight buffer in RAM.
+    pub fn spill_reader(&self) -> io::Result<SpillReader> {
+        match self {
+            Self::Disk(writer) => File::open(writer.part_path()).map(SpillReader::File),
+            Self::Memory(writer) => Ok(SpillReader::Memory(ChunkReader::new(writer.buf()))),
+        }
+    }
+}
+
+/// What the download-ahead feeder reads back from.
+pub enum SpillReader {
+    File(File),
+    Memory(ChunkReader),
+}
+
+impl Read for SpillReader {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::File(file) => file.read(out),
+            Self::Memory(memory) => memory.read(out),
+        }
     }
 }
 

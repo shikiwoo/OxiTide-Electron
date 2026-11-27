@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use oxitide_audio::cache::DiskCache;
+use oxitide_audio::cache::TrackCache;
 use oxitide_audio::devices::{DeviceCaps, DeviceGroup, DeviceKind, Transport};
 use oxitide_audio::engine::{EngineEvent, PlaybackState, StreamResolver};
 use oxitide_audio::output::{self, AudioOutput, OutputDevice, OutputMode};
@@ -13,21 +13,21 @@ use serde::{Deserialize, Serialize};
 use crate::config::{default_cache_dir, AudioConfig, Config};
 
 /// Build the disk cache from config: the configured directory when usable,
-/// else the default, else a temp directory. `DiskCache::new` is infallible.
+/// else the default, else a temp directory. `TrackCache::disk` is infallible.
 /// The stale-`.part` sweep and cap enforcement (`cleanup`) run on the startup
 /// background thread after the window is shown; see `main.rs`.
-pub fn build_cache(config: &Config) -> Arc<DiskCache> {
+pub fn build_cache(config: &Config) -> Arc<TrackCache> {
     let max_bytes = config.cache.max_size_mb.saturating_mul(1024 * 1024);
     let configured = config.cache.dir.trim();
     if !configured.is_empty() {
-        let cache = DiskCache::new(std::path::PathBuf::from(configured), max_bytes);
+        let cache = TrackCache::disk(std::path::PathBuf::from(configured), max_bytes);
         if cache.usable() {
             return cache;
         }
         tracing::warn!("configured cache dir is unusable; falling back to the default");
     }
     let dir = default_cache_dir().unwrap_or_else(|| std::env::temp_dir().join("oxitide-cache"));
-    DiskCache::new(dir, max_bytes)
+    TrackCache::disk(dir, max_bytes)
 }
 
 /// Resolves a track's stream plan using a `TidalClient`. Runs the async client
@@ -567,7 +567,7 @@ mod tests {
         config.cache.max_size_mb = 1;
 
         let cache = build_cache(&config);
-        assert_eq!(cache.dir(), dir.as_path());
+        assert_eq!(cache.dir(), Some(dir.as_path()));
         assert_eq!(cache.max_bytes(), 1024 * 1024);
         assert!(part.exists(), "build_cache must not scan the directory");
         cache.cleanup();
