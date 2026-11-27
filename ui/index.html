@@ -11,6 +11,14 @@
         try {
           t = localStorage.getItem("oxitide.theme") || "dark";
         } catch (e) {}
+        // Catppuccin flavours (lib/theme.ts themeFlavour) paint `data-palette`
+        // over the dark recipe; Latte over the light one.
+        var palette = null;
+        var flavour = /^catppuccin-(latte|frappe|macchiato|mocha|mocha-oled)$/.exec(t);
+        if (flavour) {
+          palette = flavour[1];
+          t = palette === "latte" ? "light" : "dark";
+        }
         if (t === "system") {
           if (window.matchMedia) {
             t = window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -41,6 +49,7 @@
           root.lang = lang === "en-XA" ? "en" : lang;
         }
         root.dataset.theme = t;
+        if (palette) root.dataset.palette = palette;
         root.style.colorScheme = m === "rack" ? "dark" : t;
         if (m === "atmosphere" || m === "instrument" || m === "rack") root.dataset.mode = m;
         if (tone === "warm" || tone === "neutral" || tone === "black") root.dataset.tone = tone;
@@ -54,6 +63,12 @@
     <style>
       html, #boot { background: var(--bg, #17120e); }
       html[data-theme="light"], html[data-theme="light"] #boot { background: var(--bg, #f6f1ea); }
+      /* Catppuccin bases (catppuccin.css); Rack keeps its own. */
+      html[data-palette="latte"]:not([data-mode="rack"]), html[data-palette="latte"]:not([data-mode="rack"]) #boot { background: var(--bg, #eff1f5); }
+      html[data-palette="frappe"]:not([data-mode="rack"]), html[data-palette="frappe"]:not([data-mode="rack"]) #boot { background: var(--bg, #303446); }
+      html[data-palette="macchiato"]:not([data-mode="rack"]), html[data-palette="macchiato"]:not([data-mode="rack"]) #boot { background: var(--bg, #24273a); }
+      html[data-palette="mocha"]:not([data-mode="rack"]), html[data-palette="mocha"]:not([data-mode="rack"]) #boot { background: var(--bg, #1e1e2e); }
+      html[data-palette="mocha-oled"]:not([data-mode="rack"]), html[data-palette="mocha-oled"]:not([data-mode="rack"]) #boot { background: var(--bg, #000000); }
       #boot {
         position: fixed;
         inset: 0;

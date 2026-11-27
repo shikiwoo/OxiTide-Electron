@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { HotkeyAction } from "./hotkeys";
+import type { ThemeSetting } from "./theme";
 import { claimPlay } from "./playClaims";
 import { userTrackChange } from "./trackIntent";
 
@@ -534,7 +535,7 @@ export interface Config {
   ui: {
     quality_display: "compact" | "detailed";
     mode: "instrument" | "atmosphere" | "rack";
-    theme: "dark" | "light" | "system";
+    theme: ThemeSetting;
     instrument_tone: InstrumentTone;
     typeface: "auto" | "manrope" | "inter" | "system" | "custom";
     custom_typeface: string;
@@ -995,7 +996,7 @@ export const api = {
   setRackSettings: (settings: RackSettings) =>
     invoke<RackSettings>("set_rack_settings", { settings }),
   setLevelMeter: (enabled: boolean) => invoke<void>("set_level_meter", { enabled }),
-  setTheme: (theme: "dark" | "light" | "system") => invoke<void>("set_theme", { theme }),
+  setTheme: (theme: ThemeSetting) => invoke<void>("set_theme", { theme }),
   setInstrumentTone: (tone: InstrumentTone) => invoke<void>("set_instrument_tone", { tone }),
   setTypeface: (typeface: "auto" | "manrope" | "inter" | "system" | "custom") =>
     invoke<void>("set_typeface", { typeface }),

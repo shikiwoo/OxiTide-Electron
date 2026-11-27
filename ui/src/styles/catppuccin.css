@@ -1,0 +1,162 @@
+/* Catppuccin palettes (https://catppuccin.com/palette). `data-palette` sits
+   beside `data-theme` (Latte resolves light, the rest dark), so everything
+   keyed on the theme keeps working; this file only swaps semantic tokens.
+   Components never read these names. Rack keeps its hardware skin, so no
+   rule here applies under `data-mode="rack"`. Studio's Tone is OxiTide's
+   own palette and steps aside (modes.css skips `[data-palette]`).
+
+   Each flavour sets the private `--ctp-*` inputs; the recipe below maps them
+   onto the semantic layer. Accent is Mauve. */
+
+:root[data-palette="latte"] {
+  --ctp-base: #eff1f5;
+  --ctp-mantle: #e6e9ef;
+  --ctp-crust: #dce0e8;
+  --ctp-text: #4c4f69;
+  /* Subtext 1: Subtext 0 is 4.4:1 on Base, under the 4.5:1 floor. */
+  --ctp-muted: #5c5f77;
+  --ctp-accent: #8839ef;
+  --ctp-on-accent: #eff1f5;
+  --ctp-red: #d20f39;
+  /* Latte's Green and Yellow, darkened to 4.5:1 on Base (text use). */
+  --ctp-green: #2b7a1e;
+  --ctp-yellow: #965c0c;
+  /* Opaque surfaces lift toward this (white on paper, Surface 0 in the dark). */
+  --ctp-lift: #ffffff;
+}
+
+:root[data-palette="frappe"] {
+  --ctp-base: #303446;
+  --ctp-mantle: #292c3c;
+  --ctp-crust: #232634;
+  --ctp-text: #c6d0f5;
+  --ctp-muted: #a5adce;
+  --ctp-accent: #ca9ee6;
+  --ctp-on-accent: #232634;
+  --ctp-red: #e78284;
+  --ctp-green: #a6d189;
+  --ctp-yellow: #e5c890;
+  --ctp-lift: #414559;
+}
+
+:root[data-palette="macchiato"] {
+  --ctp-base: #24273a;
+  --ctp-mantle: #1e2030;
+  --ctp-crust: #181926;
+  --ctp-text: #cad3f5;
+  --ctp-muted: #a5adcb;
+  --ctp-accent: #c6a0f6;
+  --ctp-on-accent: #181926;
+  --ctp-red: #ed8796;
+  --ctp-green: #a6da95;
+  --ctp-yellow: #eed49f;
+  --ctp-lift: #363a4f;
+}
+
+:root[data-palette="mocha"] {
+  --ctp-base: #1e1e2e;
+  --ctp-mantle: #181825;
+  --ctp-crust: #11111b;
+  --ctp-text: #cdd6f4;
+  --ctp-muted: #a6adc8;
+  --ctp-accent: #cba6f7;
+  --ctp-on-accent: #11111b;
+  --ctp-red: #f38ba8;
+  --ctp-green: #a6e3a1;
+  --ctp-yellow: #f9e2af;
+  --ctp-lift: #313244;
+}
+
+/* Mocha OLED: Mocha's text and accents on true black. Base, Mantle and Crust
+   all go black; controls and menus keep a Surface 0 lift to read as surfaces. */
+:root[data-palette="mocha-oled"] {
+  --ctp-base: #000000;
+  --ctp-mantle: #000000;
+  --ctp-crust: #000000;
+  --ctp-text: #cdd6f4;
+  --ctp-muted: #a6adc8;
+  --ctp-accent: #cba6f7;
+  --ctp-on-accent: #11111b;
+  --ctp-red: #f38ba8;
+  --ctp-green: #a6e3a1;
+  --ctp-yellow: #f9e2af;
+  --ctp-lift: #313244;
+}
+
+/* The recipe (every mode but Rack). Translucent surfaces tint toward the
+   text colour, so one recipe serves Latte's paper and the dark flavours. */
+:root[data-palette]:not([data-mode="rack"]) {
+  --accent-brand: var(--ctp-accent);
+  --on-accent-brand: var(--ctp-on-accent);
+  --danger: var(--ctp-red);
+  --success: var(--ctp-green);
+  --warning: var(--ctp-yellow);
+
+  --bg: var(--ctp-base);
+  --text: var(--ctp-text);
+  --text-muted: var(--ctp-muted);
+
+  /* Static fallbacks for cleared inline --dyn-* values (as themes.css). */
+  --dyn-primary: var(--ctp-accent);
+  --dyn-on-primary: var(--ctp-on-accent);
+  --dyn-secondary: var(--ctp-base);
+  --dyn-tertiary: var(--ctp-accent);
+  --dyn-backdrop: var(--ctp-mantle);
+
+  --surface-1: color-mix(in srgb, var(--ctp-text) 5%, transparent);
+  --surface-2: color-mix(in srgb, var(--ctp-text) 7%, transparent);
+  --surface-3: color-mix(in srgb, var(--ctp-text) 9%, transparent);
+  --surface-float: color-mix(in srgb, var(--ctp-mantle) 94%, transparent);
+  --line: color-mix(in srgb, var(--ctp-text) 12%, transparent);
+  --edge-lit: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--ctp-text) 26%, transparent),
+    color-mix(in srgb, var(--ctp-text) 6%, transparent) 45%,
+    color-mix(in srgb, var(--ctp-crust) 45%, transparent)
+  );
+
+  --room-top: color-mix(in srgb, var(--ctp-lift) 22%, var(--ctp-base));
+  --scrim-top: color-mix(in srgb, var(--ctp-base) 55%, transparent);
+  --scrim-bottom: color-mix(in srgb, var(--ctp-base) 78%, transparent);
+}
+
+/* Latte's shadows take its Text hue instead of the warm paper's brown. */
+:root[data-palette="latte"]:not([data-mode="rack"]) {
+  --shadow-panel: 0 1px 2px rgb(76 79 105 / 0.1), 0 8px 22px rgb(76 79 105 / 0.12);
+  --shadow-cover: 0 1px 3px rgb(76 79 105 / 0.2), 0 8px 18px rgb(76 79 105 / 0.16);
+}
+
+:root[data-palette][data-mode="atmosphere"] {
+  --player-veil-top: color-mix(in srgb, var(--ctp-base) 68%, transparent);
+  --player-veil: linear-gradient(to top, color-mix(in srgb, var(--ctp-base) 88%, transparent), var(--player-veil-top));
+}
+
+/* Studio is opaque: surfaces step up from Base toward the lift colour. */
+:root[data-palette][data-mode="instrument"] {
+  --surface-1: color-mix(in srgb, var(--ctp-lift) 30%, var(--ctp-base));
+  --surface-2: color-mix(in srgb, var(--ctp-lift) 45%, var(--ctp-base));
+  --surface-3: color-mix(in srgb, var(--ctp-lift) 60%, var(--ctp-base));
+  --surface-float: color-mix(in srgb, var(--ctp-lift) 60%, var(--ctp-base));
+  --edge-lit: linear-gradient(135deg, var(--line), var(--line));
+}
+
+/* Latte Studio follows the paper recipe (themes.css): cards lighter than the
+   page, controls a step darker (Mantle, Crust). */
+:root[data-palette="latte"][data-mode="instrument"] {
+  --surface-1: color-mix(in srgb, #ffffff 55%, var(--ctp-base));
+  --surface-2: var(--ctp-mantle);
+  --surface-3: var(--ctp-crust);
+  --surface-float: color-mix(in srgb, #ffffff 75%, var(--ctp-base));
+}
+
+/* Mocha OLED: the canvas and the chrome (sidebar, queue, player bar) are one
+   black, parted by their hairlines, as Studio's Black tone. */
+:root[data-palette="mocha-oled"]:not([data-mode="rack"]) {
+  --surface-chrome: #000000;
+  --dyn-backdrop: #000000;
+  --room-top: #000000;
+}
+
+:root[data-palette="mocha-oled"][data-mode="instrument"] {
+  --player-veil-top: #000000;
+}

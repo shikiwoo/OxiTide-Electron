@@ -1149,6 +1149,61 @@
     "source": "6725e7bb",
     "draft": "3860f597"
   },
+  "settings.opt.theme.catppuccin": {
+    "status": "machine",
+    "source": "baa95197",
+    "draft": "baa95197"
+  },
+  "settings.opt.flavor.latte": {
+    "status": "machine",
+    "source": "5cf05499",
+    "draft": "5cf05499"
+  },
+  "settings.opt.flavor.frappe": {
+    "status": "machine",
+    "source": "faa61b01",
+    "draft": "faa61b01"
+  },
+  "settings.opt.flavor.macchiato": {
+    "status": "machine",
+    "source": "21b3f5a5",
+    "draft": "21b3f5a5"
+  },
+  "settings.opt.flavor.mocha": {
+    "status": "machine",
+    "source": "676cf0fe",
+    "draft": "676cf0fe"
+  },
+  "settings.opt.flavor.mochaOled": {
+    "status": "machine",
+    "source": "b3186931",
+    "draft": "b3186931"
+  },
+  "settings.opt.flavorHelp.latte": {
+    "status": "machine",
+    "source": "d6946bcf",
+    "draft": "06a914d3"
+  },
+  "settings.opt.flavorHelp.frappe": {
+    "status": "machine",
+    "source": "99e951c3",
+    "draft": "e349f0de"
+  },
+  "settings.opt.flavorHelp.macchiato": {
+    "status": "machine",
+    "source": "c70ee2b7",
+    "draft": "211405da"
+  },
+  "settings.opt.flavorHelp.mocha": {
+    "status": "machine",
+    "source": "1575294b",
+    "draft": "8e52fe39"
+  },
+  "settings.opt.flavorHelp.mochaOled": {
+    "status": "machine",
+    "source": "4aa1f0da",
+    "draft": "d2ee8253"
+  },
   "settings.opt.mode.atmosphere": {
     "status": "machine",
     "source": "402b3d52",
@@ -1499,10 +1554,35 @@
     "source": "d36f6a6f",
     "draft": "240a1ebe"
   },
+  "settings.theme.catppuccinHelp": {
+    "status": "machine",
+    "source": "05597566",
+    "draft": "83efdab7"
+  },
+  "settings.flavor.label": {
+    "status": "machine",
+    "source": "f6cbe062",
+    "draft": "84bb1ae6"
+  },
+  "settings.flavor.description": {
+    "status": "machine",
+    "source": "7aa1ed4a",
+    "draft": "57bae4db"
+  },
+  "settings.flavor.rackHelp": {
+    "status": "machine",
+    "source": "ac36949f",
+    "draft": "f455ca0d"
+  },
   "settings.studioTone.lightHelp": {
     "status": "machine",
     "source": "d318cdf8",
     "draft": "d60f80de"
+  },
+  "settings.studioTone.catppuccinHelp": {
+    "status": "machine",
+    "source": "84bbd8e6",
+    "draft": "ceedbcc5"
   },
   "settings.customFont.placeholder": {
     "status": "machine",
@@ -1846,8 +1926,13 @@
   },
   "settings.keywords.theme": {
     "status": "machine",
-    "source": "884111fe",
-    "draft": "989a7c2b"
+    "source": "f236a00f",
+    "draft": "784ccce4"
+  },
+  "settings.keywords.flavor": {
+    "status": "machine",
+    "source": "7400360a",
+    "draft": "0f0dfc18"
   },
   "settings.keywords.mode": {
     "status": "machine",
