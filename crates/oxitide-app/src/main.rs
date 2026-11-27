@@ -164,11 +164,41 @@ pub(crate) fn handle_deep_link(app: &tauri::AppHandle, raw: &str) {
     });
 }
 
+/// Whether to set `__NV_DISABLE_EXPLICIT_SYNC=1` for WebKitGTK: only on an
+/// NVIDIA driver, only in Tauri mode (Electron draws the real window), and
+/// never over a value the user set (`=0` opts out). Tauri's Linux graphics
+/// guide lists it first among the fixes that keep hardware acceleration.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn wants_nv_explicit_sync_off(already_set: bool, nvidia: bool, electron: bool) -> bool {
+    !already_set && nvidia && !electron
+}
+
+/// Sets the variable before any thread starts: WebKitGTK and the NVIDIA EGL
+/// driver read it at initialisation. Returns whether it set it.
+#[cfg(target_os = "linux")]
+fn apply_webkit_gpu_env() -> bool {
+    const VAR: &str = "__NV_DISABLE_EXPLICIT_SYNC";
+    let nvidia = std::path::Path::new("/proc/driver/nvidia/version").exists();
+    let apply =
+        wants_nv_explicit_sync_off(std::env::var_os(VAR).is_some(), nvidia, shell::electron());
+    if apply {
+        std::env::set_var(VAR, "1");
+    }
+    apply
+}
+
 fn main() {
+    // First, while the process is still single-threaded.
+    #[cfg(target_os = "linux")]
+    let nv_sync_off = apply_webkit_gpu_env();
     let _ = perf::install();
     #[cfg(target_os = "linux")]
     tray::set_application_name();
     init_logging();
+    #[cfg(target_os = "linux")]
+    if nv_sync_off {
+        tracing::info!("NVIDIA driver: set __NV_DISABLE_EXPLICIT_SYNC=1 for WebKitGTK");
+    }
     panic_log::install();
     perf::mark("logging_ready");
     let config = config::Config::load();
@@ -667,5 +697,27 @@ fn run_exit_work(app_handle: &tauri::AppHandle) {
         if let Some(cache) = state.cache() {
             cache.clear();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wants_nv_explicit_sync_off;
+
+    #[test]
+    fn nv_explicit_sync_only_on_nvidia_in_tauri_mode_when_unset() {
+        assert!(wants_nv_explicit_sync_off(false, true, false));
+        assert!(
+            !wants_nv_explicit_sync_off(true, true, false),
+            "user's value wins"
+        );
+        assert!(
+            !wants_nv_explicit_sync_off(false, false, false),
+            "no NVIDIA driver"
+        );
+        assert!(
+            !wants_nv_explicit_sync_off(false, true, true),
+            "Electron shell"
+        );
     }
 }
