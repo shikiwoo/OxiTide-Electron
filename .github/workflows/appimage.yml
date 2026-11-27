@@ -120,6 +120,9 @@ jobs:
 
       # docs/release-notes/<tag>.md, when the tag has one, heads the
       # description; GitHub's generated change list follows it.
+      # A beta/alpha/rc tag (electron-v1.2.1-beta.1) is a prerelease, which
+      # .../releases/latest/download/latest.json skips, so installed copies
+      # are never offered it. A packaging revision (electron-v1.1.8-1) is not.
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -128,9 +131,14 @@ jobs:
           if [ -f "docs/release-notes/$GITHUB_REF_NAME.md" ]; then
             notes=(--notes-file "docs/release-notes/$GITHUB_REF_NAME.md")
           fi
+          channel=()
+          if [[ "$GITHUB_REF_NAME" =~ -(alpha|beta|rc)(\.|$) ]]; then
+            channel=(--prerelease)
+          fi
           gh release create "$GITHUB_REF_NAME" \
             dist/*.AppImage dist/*.exe dist/*.dmg out/latest.json out/SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \
             --title "OxiTide Electron ${GITHUB_REF_NAME#electron-v}" \
             "${notes[@]}" \
+            "${channel[@]}" \
             --generate-notes
