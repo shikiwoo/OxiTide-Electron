@@ -13,6 +13,7 @@ interface BootResult {
   colorScheme: string | undefined;
   mode?: string;
   tone?: string;
+  palette?: string;
 }
 
 function runBootScript(options: {
@@ -46,6 +47,7 @@ function runBootScript(options: {
   const result: BootResult = { theme: dataset.theme, colorScheme: style.colorScheme };
   if (dataset.mode) result.mode = dataset.mode;
   if (dataset.tone) result.tone = dataset.tone;
+  if (dataset.palette) result.palette = dataset.palette;
   return result;
 }
 
@@ -108,6 +110,20 @@ describe("theme boot script", () => {
       colorScheme: "dark",
       mode: "rack",
     });
+  });
+
+  it("paints a Catppuccin flavour over the dark or light recipe", () => {
+    expect(runBootScript({ stored: "catppuccin-mocha-oled", prefersDark: false })).toEqual({
+      theme: "dark",
+      colorScheme: "dark",
+      palette: "mocha-oled",
+    });
+    expect(runBootScript({ stored: "catppuccin-latte", prefersDark: true })).toEqual({
+      theme: "light",
+      colorScheme: "light",
+      palette: "latte",
+    });
+    expect(runBootScript({ stored: "catppuccin-espresso" })).toEqual({ theme: "dark", colorScheme: "dark" });
   });
 
   it("skips unknown or unreadable mode and tone mirrors", () => {

@@ -411,13 +411,21 @@ impl RackConfig {
 }
 
 /// Color theme. Orthogonal to `UiMode`; `System` follows the OS preference.
+/// The Catppuccin flavours are palettes laid over the dark or light recipe
+/// (`data-palette`, catppuccin.css): Latte is light, the rest are dark, and
+/// Mocha OLED is Mocha on true-black backgrounds. Rack ignores them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum Theme {
     #[default]
     Dark,
     Light,
     System,
+    CatppuccinLatte,
+    CatppuccinFrappe,
+    CatppuccinMacchiato,
+    CatppuccinMocha,
+    CatppuccinMochaOled,
 }
 
 /// Studio (Instrument) surface colours in the dark theme: the warm brown
@@ -1408,6 +1416,11 @@ duration_ms = 4000
         config.save_to(&path).unwrap();
         let text = fs::read_to_string(&path).unwrap();
         assert!(text.contains("theme = \"system\""), "{text}");
+        assert_eq!(Config::load_from(&path), config);
+        config.ui.theme = Theme::CatppuccinMochaOled;
+        config.save_to(&path).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("theme = \"catppuccin-mocha-oled\""), "{text}");
         assert_eq!(Config::load_from(&path), config);
         let _ = fs::remove_dir_all(dir);
     }

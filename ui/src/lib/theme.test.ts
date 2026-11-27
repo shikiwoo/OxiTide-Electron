@@ -3,6 +3,7 @@ import {
   readMirror,
   readThemeMirror,
   resolveTheme,
+  themeFlavour,
   THEME_STORAGE_KEY,
   TONE_STORAGE_KEY,
   writeThemeMirror,
@@ -17,6 +18,21 @@ describe("resolveTheme", () => {
     expect(resolveTheme("system", true)).toBe("dark");
     expect(resolveTheme("system", false)).toBe("light");
   });
+  it("Catppuccin Latte is light and every other flavour dark", () => {
+    expect(resolveTheme("catppuccin-latte", true)).toBe("light");
+    for (const flavour of ["frappe", "macchiato", "mocha", "mocha-oled"] as const) {
+      expect(resolveTheme(`catppuccin-${flavour}`, false)).toBe("dark");
+    }
+  });
+});
+
+describe("themeFlavour", () => {
+  it("names the Catppuccin flavour, or null for OxiTide's own themes", () => {
+    expect(themeFlavour("catppuccin-mocha-oled")).toBe("mocha-oled");
+    expect(themeFlavour("catppuccin-latte")).toBe("latte");
+    expect(themeFlavour("dark")).toBeNull();
+    expect(themeFlavour("system")).toBeNull();
+  });
 });
 
 describe("theme mirror", () => {
@@ -26,6 +42,8 @@ describe("theme mirror", () => {
     const get = (value: string | null) => ({ getItem: () => value, setItem: () => {} });
     expect(readThemeMirror(get("light"))).toBe("light");
     expect(readThemeMirror(get("system"))).toBe("system");
+    expect(readThemeMirror(get("catppuccin-frappe"))).toBe("catppuccin-frappe");
+    expect(readThemeMirror(get("catppuccin-espresso"))).toBe("dark");
     expect(readThemeMirror(get(null))).toBe("dark");
     expect(readThemeMirror(get("evil"))).toBe("dark");
   });

@@ -136,10 +136,23 @@ pub fn first_show_gate(app: &AppHandle, gate: u8) {
 /// themes.css / rack.css; `os_dark` resolves `Theme::System`.
 pub fn boot_background(config: &Config, os_dark: bool) -> (u8, u8, u8) {
     use crate::config::{InstrumentTone, Theme, UiMode};
+    // Catppuccin flavours paint their own base (catppuccin.css); Tone is
+    // Studio's own palette and does not apply to them.
+    let flavour = match config.ui.theme {
+        Theme::CatppuccinLatte => Some((0xef, 0xf1, 0xf5)),
+        Theme::CatppuccinFrappe => Some((0x30, 0x34, 0x46)),
+        Theme::CatppuccinMacchiato => Some((0x24, 0x27, 0x3a)),
+        Theme::CatppuccinMocha => Some((0x1e, 0x1e, 0x2e)),
+        Theme::CatppuccinMochaOled => Some((0, 0, 0)),
+        Theme::Dark | Theme::Light | Theme::System => None,
+    };
+    if let (Some(base), false) = (flavour, config.ui.mode == UiMode::Rack) {
+        return base;
+    }
     let dark = match config.ui.theme {
-        Theme::Dark => true,
         Theme::Light => false,
         Theme::System => os_dark,
+        _ => true,
     };
     match (config.ui.mode, dark, config.ui.instrument_tone) {
         // Rack is always dark (RK-D12).
@@ -466,6 +479,25 @@ mod tests {
             (0x05, 0x05, 0x05),
             "Rack is always dark"
         );
+        config.ui.theme = Theme::CatppuccinMocha;
+        assert_eq!(
+            boot_background(&config, false),
+            (0x05, 0x05, 0x05),
+            "Rack ignores Catppuccin"
+        );
+
+        config.ui.mode = UiMode::Instrument;
+        config.ui.instrument_tone = InstrumentTone::Black;
+        assert_eq!(
+            boot_background(&config, false),
+            (0x1e, 0x1e, 0x2e),
+            "a flavour wins over the tone"
+        );
+        config.ui.theme = Theme::CatppuccinLatte;
+        assert_eq!(boot_background(&config, true), (0xef, 0xf1, 0xf5));
+        config.ui.mode = UiMode::Atmosphere;
+        config.ui.theme = Theme::CatppuccinMochaOled;
+        assert_eq!(boot_background(&config, false), (0, 0, 0));
     }
 
     fn monitor(x: i32, y: i32, width: u32, height: u32) -> MonitorRect {

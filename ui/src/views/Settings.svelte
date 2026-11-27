@@ -65,7 +65,7 @@
     ZOOM_STEP,
   } from "../lib/appearance.svelte";
   import { formatPercent } from "../lib/format";
-  import type { ThemeSetting } from "../lib/theme";
+  import type { CatppuccinFlavour, ThemeSetting } from "../lib/theme";
   import {
     CROSSFADE_MAX_MS,
     DB_STEP,
@@ -149,11 +149,41 @@
 
   // Option lists. Typed here so each control's value type is the setting's own
   // union rather than a widened string.
-  const THEME_OPTIONS: { value: ThemeSetting; label: string; icon: "moon" | "sun" | "monitor" }[] = [
+  /// The Theme row's choices: OxiTide's own three, plus Catppuccin, whose
+  /// flavour the Flavor row below picks (each flavour is its own ThemeSetting).
+  type ThemeChoice = "dark" | "light" | "system" | "catppuccin";
+  const THEME_OPTIONS: { value: ThemeChoice; label: string; icon: "moon" | "sun" | "monitor" | "palette" }[] = [
     { value: "dark", get label() { return t("settings.opt.theme.dark"); }, icon: "moon" },
     { value: "light", get label() { return t("settings.opt.theme.light"); }, icon: "sun" },
     { value: "system", get label() { return t("settings.opt.theme.system"); }, icon: "monitor" },
+    { value: "catppuccin", get label() { return t("settings.opt.theme.catppuccin"); }, icon: "palette" },
   ];
+  const FLAVOR_OPTIONS: { value: CatppuccinFlavour; label: string; hint: string }[] = [
+    { value: "latte", get label() { return t("settings.opt.flavor.latte"); }, get hint() { return t("settings.opt.flavorHelp.latte"); } },
+    { value: "frappe", get label() { return t("settings.opt.flavor.frappe"); }, get hint() { return t("settings.opt.flavorHelp.frappe"); } },
+    { value: "macchiato", get label() { return t("settings.opt.flavor.macchiato"); }, get hint() { return t("settings.opt.flavorHelp.macchiato"); } },
+    { value: "mocha", get label() { return t("settings.opt.flavor.mocha"); }, get hint() { return t("settings.opt.flavorHelp.mocha"); } },
+    { value: "mocha-oled", get label() { return t("settings.opt.flavor.mochaOled"); }, get hint() { return t("settings.opt.flavorHelp.mochaOled"); } },
+  ];
+  const themeChoice = $derived<ThemeChoice>(appearance.flavour ? "catppuccin" : (appearance.theme as ThemeChoice));
+  // The flavour Catppuccin returns to when picked again this session.
+  let lastFlavour = $state<CatppuccinFlavour | null>(null);
+
+  function setThemeChoice(choice: ThemeChoice) {
+    if (choice !== "catppuccin") {
+      void appearance.setTheme(choice).catch(apply);
+      return;
+    }
+    if (appearance.flavour) return;
+    const flavour = lastFlavour ?? (appearance.resolvedTheme === "light" ? "latte" : "mocha");
+    setFlavour(flavour);
+  }
+
+  function setFlavour(flavour: CatppuccinFlavour) {
+    lastFlavour = flavour;
+    const theme: ThemeSetting = `catppuccin-${flavour}`;
+    void appearance.setTheme(theme).catch(apply);
+  }
   const MODE_OPTIONS: { value: UiMode; label: string }[] = [
     { value: "atmosphere", get label() { return t("settings.opt.mode.atmosphere"); } },
     { value: "instrument", get label() { return t("settings.opt.mode.instrument"); } },
@@ -928,6 +958,7 @@
           rack: appearance.mode === "rack",
           studio: appearance.mode === "instrument",
           exclusive: anyExclusive,
+          catppuccin: appearance.flavour !== null,
         }}
         onselect={jumpTo}
       />
@@ -987,15 +1018,32 @@
                 id="theme" label={t("settings.theme.label")}
                 description={appearance.theme === "system"
                   ? t("settings.theme.systemHelp")
-                  : t("settings.theme.description")}
+                  : appearance.flavour
+                    ? t("settings.theme.catppuccinHelp")
+                    : t("settings.theme.description")}
               >
                 <Segmented
                   label={t("settings.theme.label")}
-                  value={appearance.theme}
+                  value={themeChoice}
                   options={THEME_OPTIONS}
-                  onchange={(value) => appearance.setTheme(value).catch(apply)}
+                  onchange={setThemeChoice}
                 />
               </SettingRow>
+              {#if appearance.flavour}
+                <SettingRow
+                  id="catppuccin-flavor" label={t("settings.flavor.label")}
+                  description={appearance.mode === "rack"
+                    ? t("settings.flavor.rackHelp")
+                    : t("settings.flavor.description")}
+                >
+                  <Select
+                    label={t("settings.flavor.label")}
+                    value={appearance.flavour}
+                    options={FLAVOR_OPTIONS}
+                    onchange={setFlavour}
+                  />
+                </SettingRow>
+              {/if}
               <SettingRow id="mode" label={t("settings.mode.label")} description={MODE_HELP[appearance.mode]}>
                 <Segmented
                   label={t("settings.mode.label")}
@@ -1007,9 +1055,11 @@
               {#if appearance.mode === "instrument"}
                 <SettingRow
                   id="studio-tone" label={t("settings.studioTone.label")}
-                  description={appearance.resolvedTheme === "light"
-                    ? t("settings.studioTone.lightHelp")
-                    : TONE_HELP[appearance.instrumentTone]}
+                  description={appearance.flavour
+                    ? t("settings.studioTone.catppuccinHelp")
+                    : appearance.resolvedTheme === "light"
+                      ? t("settings.studioTone.lightHelp")
+                      : TONE_HELP[appearance.instrumentTone]}
                 >
                   <Segmented
                     label={t("settings.studioTone.label")}

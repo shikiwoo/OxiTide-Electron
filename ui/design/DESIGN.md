@@ -20,7 +20,7 @@ current system and must be updated in the same change that alters it.
    analysis) → **semantic** (`--bg`, `--text`, `--accent`, `--surface-*`, `--pane-*`, …).
    Components read semantic tokens only. Files: `ui/src/styles/tokens.css` (base +
    semantic + motion + flags), `modes.css` (per-mode overrides), `themes.css` (light
-   inversion), `fonts.css`.
+   inversion), `catppuccin.css` (Catppuccin palettes), `fonts.css`.
 2. **Components never branch on mode or theme.** A component that needs `if mode` means
    the token or flag surface is incomplete — extend it. The single sanctioned exception
    is `App.svelte` choosing `RackShell` from `appearance.rackShell` (Rack spec RK-D1);
@@ -30,7 +30,22 @@ current system and must be updated in the same change that alters it.
    (`atmosphere | instrument | rack`) and `data-theme` (`dark | light`). Rack is always
    dark and ignores `data-theme` (no light variant is planned). `data-tone`
    (`warm | neutral | black`) is always present but only Studio (`instrument`) in the
-   dark theme reads it.
+   dark theme reads it, and never under a Catppuccin palette.
+   **Catppuccin** (Settings → Theme → Catppuccin, then Flavor) adds `data-palette`
+   (`latte | frappe | macchiato | mocha | mocha-oled`; `ui.theme =
+   "catppuccin-<flavor>"`). Latte resolves `data-theme="light"`, the rest `dark`, so
+   everything keyed on the theme (cover analysis, hero scrims, Dynamic colour) keeps
+   working. `catppuccin.css` feeds each flavour's colours (private `--ctp-*` inputs:
+   Base, Mantle, Crust, Text, a muted text, Mauve accent, Red/Green/Yellow, and a "lift"
+   colour opaque surfaces step toward) through one recipe onto the semantic tokens:
+   translucent surfaces tint toward Text (one recipe for paper and dark), Studio's opaque
+   surfaces mix Base toward Surface 0 (white on Latte, whose controls step down to
+   Mantle/Crust like the warm paper). Contrast floor holds at 4.5:1 on Base: Latte uses
+   Subtext 1 for muted text and darkened Green (`#2b7a1e`) and Yellow (`#965c0c`).
+   **Mocha OLED** is Mocha's text and accents with Base/Mantle/Crust at `#000000`; the
+   chrome (sidebar, queue, Studio's player bar) is one black with the canvas, parted by
+   hairlines, as Studio's Black tone; surfaces keep a Surface 0 lift. Rack ignores
+   palettes (`:not([data-mode="rack"])`), keeping its hardware skin.
 4. **Feature flags** live as CSS numbers (`--flag-*`) for presentation gates and as JS
    getters on the `appearance` singleton for behaviour (`discSpin`, `waveSeek`,
    `rackShell`, …).
@@ -762,7 +777,7 @@ player-bar and mini `VolumeSlider` dims to 55% with its range and mute button `d
 
 | Concern | Location |
 |---|---|
-| Tokens | `ui/src/styles/{tokens,modes,themes,fonts}.css` |
+| Tokens | `ui/src/styles/{tokens,modes,themes,catppuccin,fonts}.css` |
 | Appearance state | `ui/src/lib/appearance.svelte.ts` |
 | Dynamic colour | `ui/src/lib/dynamicColor.svelte.ts`, `crates/oxitide-app/src/{artwork,palette}.rs` |
 | Rack shell + units | `ui/src/lib/rack/` |

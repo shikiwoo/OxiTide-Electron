@@ -38,8 +38,8 @@ phone remote, scrobbling) under a Svelte 5 UI. This fork keeps all of that and a
 | **Updates from this fork:** the updater reads this repository's releases and only installs builds signed with the fork's own key, so an install never "updates" to upstream OxiTide | Windows |
 | **UI changes:** share button in the player bar and *Copy link* in track menus; track-list pages scroll as one (header and rows together); album, playlist and mix titles wrap to two lines across the full header width | All |
 
-The fork is based on upstream **1.1.8** and numbers its own releases from there (1.1.8-1, then 1.1.9). Fork version
-numbers are independent of upstream's: the fork's 1.1.9 is not upstream's 1.1.9.
+The fork is based on upstream **1.1.8** and numbers its own releases from there (1.1.8-1, 1.1.9, then 1.2.0). Fork version
+numbers are independent of upstream's: the fork's 1.2.0 is not upstream's 1.2.0.
 
 ### Why the Electron shell
 
@@ -242,7 +242,7 @@ To release: set the version in the workspace `Cargo.toml` (the only place it liv
 AppImage run to pass, then tag that commit with the same version:
 
 ```bash
-git tag electron-v1.1.9 && git push origin electron-v1.1.9
+git tag electron-v1.2.0 && git push origin electron-v1.2.0
 ```
 
 **Signing key.** Updates are signed with the fork's key pair: the public key is `plugins.updater.pubkey` in

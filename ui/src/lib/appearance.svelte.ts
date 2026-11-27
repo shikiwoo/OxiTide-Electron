@@ -6,7 +6,7 @@ import { DEFAULT_CATJAM_SCALE, DEFAULT_COAT, clampCatjamScale, isCoat } from "./
 import { language } from "./language.svelte";
 import {
   MODE_STORAGE_KEY, readMirror, readThemeMirror, resolveTheme, TONE_STORAGE_KEY, writeMirror,
-  writeThemeMirror, type ResolvedTheme, type ThemeSetting,
+  themeFlavour, writeThemeMirror, type CatppuccinFlavour, type ResolvedTheme, type ThemeSetting,
 } from "./theme";
 
 export type UiMode = "instrument" | "atmosphere" | "rack";
@@ -103,6 +103,8 @@ export interface Appearance {
   readonly mode: UiMode;
   readonly theme: ThemeSetting;
   readonly resolvedTheme: ResolvedTheme;
+  /// The Catppuccin flavour the theme paints (`data-palette`), or null.
+  readonly flavour: CatppuccinFlavour | null;
   /// Studio's dark surfaces; modes.css reads it as `data-tone` (Studio + dark only).
   readonly instrumentTone: InstrumentTone;
   readonly typeface: TypefaceSetting;
@@ -205,6 +207,10 @@ export function createAppearance(): Appearance {
     root.dataset.mode = mode;
     root.dataset.theme = resolved;
     root.dataset.tone = instrumentTone;
+    // Catppuccin palettes (catppuccin.css; Rack ignores them).
+    const flavour = themeFlavour(theme);
+    if (flavour) root.dataset.palette = flavour;
+    else delete root.dataset.palette;
     // Rack is always dark; it has no light variant (RK-D12).
     root.style.colorScheme = mode === "rack" ? "dark" : resolved;
     root.dataset.density = density;
@@ -411,6 +417,7 @@ export function createAppearance(): Appearance {
     get mode() { return mode; },
     get theme() { return theme; },
     get resolvedTheme() { return resolveTheme(theme, prefersDark); },
+    get flavour() { return themeFlavour(theme); },
     get instrumentTone() { return instrumentTone; },
     get typeface() { return typefaceSetting; },
     get customTypeface() { return customTypeface; },

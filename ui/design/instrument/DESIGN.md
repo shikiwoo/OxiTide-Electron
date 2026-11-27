@@ -35,7 +35,8 @@ choice like every per-mode look setting.
 
 `ui.instrument_tone` (Settings → Tone, shown in Studio) sets `data-tone` on `<html>`.
 `modes.css` swaps the dark recipe for Neutral and Black; the light theme keeps its warm
-paper whatever the tone. Layout, flags and everything else stay identical.
+paper whatever the tone, and a Catppuccin palette replaces the tones altogether (the Tone
+row says so; see the foundation §1.3). Layout, flags and everything else stay identical.
 
 | Token | Warm | Neutral | Black (OLED) |
 |---|---|---|---|

@@ -18,7 +18,7 @@ export interface SettingEntry extends EntryText {
   id: string;
   tab: SettingsTab;
   en: EntryText;
-  needs?: "rack" | "notRack" | "studio" | "exclusive";
+  needs?: "rack" | "notRack" | "studio" | "exclusive" | "catppuccin";
 }
 
 export interface SearchContext {
@@ -26,6 +26,8 @@ export interface SearchContext {
   /// Studio mode (`instrument`): its Tone row is on the page.
   studio: boolean;
   exclusive: boolean;
+  /// A Catppuccin theme: its Flavor row is on the page.
+  catppuccin?: boolean;
 }
 
 type Text = (tr: (key: MessageKey, params?: Record<string, string>) => string) => string;
@@ -61,6 +63,7 @@ const e = (
 export const SETTINGS_INDEX: SettingEntry[] = [
   e("language", "appearance", "settings.section.lookAndFeel", "settings.language.label", "settings.keywords.language"),
   e("theme", "appearance", "settings.section.lookAndFeel", "settings.theme.label", "settings.keywords.theme"),
+  e("catppuccin-flavor", "appearance", "settings.section.lookAndFeel", "settings.flavor.label", "settings.keywords.flavor", "catppuccin"),
   e("mode", "appearance", "settings.section.lookAndFeel", "settings.mode.label", "settings.keywords.mode"),
   e("studio-tone", "appearance", "settings.section.lookAndFeel", "settings.studioTone.label", "settings.keywords.studioTone", "studio"),
   e("dynamic-color", "appearance", "settings.section.lookAndFeel", "settings.dynamicColor.label", "settings.keywords.dynamicColor", "notRack"),
@@ -153,6 +156,7 @@ function visible(entry: SettingEntry, ctx: SearchContext): boolean {
   if (entry.needs === "notRack") return !ctx.rack;
   if (entry.needs === "studio") return ctx.studio;
   if (entry.needs === "exclusive") return ctx.exclusive;
+  if (entry.needs === "catppuccin") return ctx.catppuccin ?? false;
   return true;
 }
 

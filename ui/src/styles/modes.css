@@ -43,8 +43,9 @@
 
 /* Studio tones (ui.instrument_tone, `data-tone`): the block above is Warm.
    Neutral and Black swap the whole dark recipe for zero-chroma greys; the
-   light theme keeps its warm paper (themes.css), so they skip it. */
-[data-mode="instrument"][data-tone="neutral"]:not([data-theme="light"]) {
+   light theme keeps its warm paper (themes.css) and Catppuccin its own
+   flavour (catppuccin.css), so they skip both. */
+[data-mode="instrument"][data-tone="neutral"]:not([data-theme="light"]):not([data-palette]) {
   --accent-brand: #f2f2f2;
   --on-accent-brand: #121212;
   --bg: #121212;
@@ -65,7 +66,7 @@
 /* Black (OLED): the canvas and the chrome (sidebar, queue, player bar) are
    all true black, parted by their hairlines; controls and menus keep enough
    lift to read as surfaces. */
-[data-mode="instrument"][data-tone="black"]:not([data-theme="light"]) {
+[data-mode="instrument"][data-tone="black"]:not([data-theme="light"]):not([data-palette]) {
   --accent-brand: #f2f2f2;
   --on-accent-brand: #000000;
   --bg: #000000;

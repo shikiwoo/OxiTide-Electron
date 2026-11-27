@@ -95,3 +95,39 @@ describe("static contrast (light brand pair)", () => {
     ).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+describe("Catppuccin flavours (catppuccin.css)", () => {
+  const ctp = readFileSync(new URL("../styles/catppuccin.css", import.meta.url), "utf8");
+  const block = (flavour: string): string => {
+    const start = ctp.indexOf(`:root[data-palette="${flavour}"] {`);
+    const match = start < 0 ? null : ctp.slice(start).match(/\{([^}]*)\}/);
+    if (!match) throw new Error(`missing flavour block ${flavour}`);
+    return match[1];
+  };
+
+  it.each(["latte", "frappe", "macchiato", "mocha", "mocha-oled"])(
+    "%s keeps text and semantic colours at 4.5:1 on its base",
+    (flavour) => {
+      const css = block(flavour);
+      const base = hexFor(css, "ctp-base");
+      for (const name of ["ctp-text", "ctp-muted", "ctp-red", "ctp-green", "ctp-yellow", "ctp-accent"]) {
+        expect(contrast(hexFor(css, name), base), `${flavour} ${name}`).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(contrast(hexFor(css, "ctp-on-accent"), hexFor(css, "ctp-accent")), `${flavour} on-accent`)
+        .toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it("paints Mocha OLED's backgrounds true black", () => {
+    expect(hexFor(block("mocha-oled"), "ctp-base")).toBe("#000000");
+    expect(hexFor(block("mocha-oled"), "ctp-text")).toBe(hexFor(block("mocha"), "ctp-text"));
+  });
+
+  it("never applies under Rack, and Studio tones step aside", () => {
+    expect(ctp).toMatch(/:root\[data-palette\]:not\(\[data-mode="rack"\]\)/);
+    const modes = readFileSync(new URL("../styles/modes.css", import.meta.url), "utf8");
+    for (const tone of ["neutral", "black"]) {
+      expect(modes).toContain(`[data-tone="${tone}"]:not([data-theme="light"]):not([data-palette])`);
+    }
+  });
+});
