@@ -317,8 +317,9 @@ keeps its own page padding and small title labels (`rack/DESIGN.md`).
 column as tall as the cover: the Play/Shuffle row (with the playlist's search pill) sits on
 the cover's bottom edge, and the title block sits 28px above it, 10px apart top to bottom:
 stats (counts like "702 TRACKS" and "2 FANS" in `--accent`), the byline, then the title
-(`clamp(30px, 3.6vw, 48px)`) directly over the buttons; a long title ends in an ellipsis and
-slides along on hover (`lib/marquee.ts`, as the player bar's lines). The kicker (PLAYLIST / ALBUM / MIX) runs vertically down the cover's right
+(`clamp(30px, 3.6vw, 48px)`) directly over the buttons. The title block spans the full width
+right of the cover, over the actions too, with no max width; a long title wraps to two lines,
+then ends in an ellipsis (the full title is the tooltip). The kicker (PLAYLIST / ALBUM / MIX) runs vertically down the cover's right
 edge (reading top to bottom), centred on it. The page's actions (Edit, Favorite, Share, More, …) sit at the
 row's right end, level with Play. Nothing sits under the cover, so the track list starts
 right below it. The header is a size container and fits narrower columns in steps: below
