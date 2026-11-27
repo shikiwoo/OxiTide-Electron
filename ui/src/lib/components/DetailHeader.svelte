@@ -2,7 +2,6 @@
   import type { Snippet } from "svelte";
   import { dragSource } from "../dragDrop.svelte";
   import type { DragPayload } from "../dragPayload";
-  import { marquee } from "../marquee";
   import Icon from "./Icon.svelte";
   import { t } from "../i18n.svelte";
 
@@ -50,30 +49,28 @@
       {@render cover()}
       <span class="kicker">{kicker}</span>
     </span>
-    <div class="hero-meta">
-      <div class="titles">
-        {#if stats}
-          <p class="stats tnum">
-            {#each statParts as part, i (i)}{#if i % 2}<span class="count">{part}</span>{:else}{part}{/if}{/each}
-          </p>
-        {/if}
-        {#if byline}<p class="subtitle">{@render byline()}</p>
-        {:else if subtitle}<p class="subtitle">{subtitle}</p>{/if}
-        <!-- A long title ends in an ellipsis; hovering slides it along
-             (lib/marquee.ts, as the player bar's lines). -->
-        <h2 use:marquee><span class="title-line" data-marquee><span>{title}</span></span></h2>
-      </div>
-      <div class="transport">
-        <button class="btn-play" onclick={onPlay} {disabled}>
-          <Icon name="play" size={20} /> {t("menu.play")}
-        </button>
-        <button class="btn-shuffle" onclick={onShuffle} {disabled}>
-          <Icon name="shuffle" size={20} /> {t("menu.shuffle")}
-        </button>
-        {#if tools}
-          <span class="tools">{@render tools()}</span>
-        {/if}
-      </div>
+    <div class="titles">
+      {#if stats}
+        <p class="stats tnum">
+          {#each statParts as part, i (i)}{#if i % 2}<span class="count">{part}</span>{:else}{part}{/if}{/each}
+        </p>
+      {/if}
+      {#if byline}<p class="subtitle">{@render byline()}</p>
+      {:else if subtitle}<p class="subtitle">{subtitle}</p>{/if}
+      <!-- A long title wraps onto a second line, then ends in an ellipsis;
+           the full title is in the tooltip. -->
+      <h2 {title}>{title}</h2>
+    </div>
+    <div class="transport">
+      <button class="btn-play" onclick={onPlay} {disabled}>
+        <Icon name="play" size={20} /> {t("menu.play")}
+      </button>
+      <button class="btn-shuffle" onclick={onShuffle} {disabled}>
+        <Icon name="shuffle" size={20} /> {t("menu.shuffle")}
+      </button>
+      {#if tools}
+        <span class="tools">{@render tools()}</span>
+      {/if}
     </div>
     {#if actions}
       <div class="actions">{@render actions()}</div>
@@ -89,15 +86,20 @@
     container: detail / inline-size;
     margin-bottom: 40px;
   }
-  /* Cover, then title + transport, then the page's actions. `--art` is the
-     cover's drawn size: the hero size (Rack sets a smaller one), capped by
-     the narrow tiers. */
+  /* Cover, then the title block across the rest of the row (over the
+     actions too, so a long title gets the full width), then transport and
+     the page's actions under it. `--art` is the cover's drawn size: the hero
+     size (Rack sets a smaller one), capped by the narrow tiers. */
   .hero {
     --art: var(--hero-size);
     display: grid;
     grid-template-columns: var(--art) minmax(0, 1fr) auto;
-    grid-template-areas: "art meta actions";
+    grid-template-rows: 1fr auto;
+    grid-template-areas:
+      "art titles titles"
+      "art transport actions";
     column-gap: 40px;
+    row-gap: 0;
   }
   .hero-art {
     grid-area: art;
@@ -106,20 +108,15 @@
   }
   /* As tall as the cover: the transport sits on its bottom edge and the
      title block sits a fixed step above it. */
-  .hero-meta {
-    grid-area: meta;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
   .titles {
+    grid-area: titles;
+    align-self: end;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 10px;
-    margin-top: auto;
     margin-bottom: 28px;
   }
-  h2,
   .subtitle,
   .stats {
     max-width: 560px;
@@ -140,16 +137,19 @@
     text-transform: uppercase;
     color: var(--text-muted);
   }
+  /* Up to two lines, then an ellipsis. The bottom padding keeps descenders
+     on the last line from being clipped. */
   h2 {
     margin: 0;
     font-size: clamp(30px, 3.6vw, 48px);
     line-height: 1.1;
-  }
-  .title-line {
-    display: block;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
     padding-bottom: 0.1em;
   }
   .subtitle {
@@ -181,6 +181,9 @@
      their size; the search pill can still grow the row when it expands
      (max-content, not fixed). */
   .transport {
+    grid-area: transport;
+    align-self: end;
+    justify-self: start;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -244,17 +247,18 @@
     .hero {
       --art: min(var(--hero-size), 200px);
       grid-template-columns: var(--art) minmax(0, 1fr);
-      grid-template-rows: 1fr auto;
+      grid-template-rows: 1fr auto auto;
       grid-template-areas:
-        "art meta"
+        "art titles"
+        "art transport"
         "art actions";
-      row-gap: 14px;
     }
     .hero-art {
       align-self: end;
     }
     .actions {
       justify-self: start;
+      margin-top: 14px;
     }
     .titles {
       margin-bottom: 20px;
@@ -266,12 +270,15 @@
       grid-template-rows: none;
       grid-template-areas:
         "art"
-        "meta"
+        "titles"
+        "transport"
         "actions";
-      row-gap: 20px;
     }
     .titles {
-      margin-top: 0;
+      margin-top: 20px;
+    }
+    .actions {
+      margin-top: 20px;
     }
     .transport {
       width: auto;

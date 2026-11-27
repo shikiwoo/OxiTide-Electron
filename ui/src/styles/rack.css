@@ -189,7 +189,7 @@
   letter-spacing: 0.08em;
 }
 :root[data-mode="rack"] .rack-main .detail-header .hero {
-  gap: 26px;
+  column-gap: 26px;
 }
 
 /* ---- Light-bar keys for page buttons (DESIGN §5.1) ---- */
