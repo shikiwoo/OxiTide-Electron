@@ -13,7 +13,8 @@
 ## Global Constraints
 
 - In Memory mode no audio bytes are written to disk: no `.part`, no `.fmp4`, no `.meta`, no `spill-*.part`, and no fallback to `std::env::temp_dir()`.
-- Disk stays the default (`backend = "disk"`); Disk-mode behaviour and its existing tests are unchanged.
+- Disk stays the default (`backend = "disk"`); Disk-mode behaviour and its existing tests are unchanged. The one exception is the protection leak fixed in Task 4 (Review Focus 7), which applies to both backends.
+- Prerequisite: `git` on `PATH` in the shell that runs the plan. The commit steps need it, and on 2026-11-27 an agent shell in this checkout could not find it.
 - `CacheConfig` gains `backend` (default `"disk"`) and `memory_max_size_mb` (default **512**). The Memory range in Settings is **256 MB to 4 GB**.
 - In Memory mode, committed + pending bytes count against the limit. Playback is never refused or degraded for the budget; going over the limit is allowed only by protected or in-flight data.
 - The backend is chosen at startup; changing it saves the config and shows a "takes effect after restart" note. There is no live switch.
@@ -28,6 +29,8 @@
 3. **Lowering the Memory limit live while a track plays.** The protected entry and its readers survive; the others are evicted. Test: Task 2, `set_max_bytes_keeps_protected_and_live_readers`.
 4. **A typo in `cache.backend` in config.toml** (e.g. `"ram"`). It must fall back to Disk with a warning, not reset the whole config through the malformed-config backup path. Test: Task 5, `unknown_cache_backend_falls_back_to_disk`.
 5. **"Clear cache" while a track plays in Memory mode.** Playback continues from the live reader, and the usage readout drops to the in-flight bytes. Test: Task 2, `clear_keeps_live_readers_valid`.
+6. **Two holders of one key** (a seek restarts the same track; repeat-one prefetches the playing track). Disk protection is a plain set, so the first `unprotect` clears it for both. Disk mode rarely evicts, so it never mattered there. Memory mode evicts on every write and on every unprotect, so the playing entry would drop out of the cache and a seek back would download it again. Memory protection is therefore a count per key. Test: Task 2, `protection_is_counted_per_holder`.
+7. **A stream dropped while its track is still resolving.** The decode thread protects the key only after `resolve` returns (`engine.rs` line 1440, line 1549 offline). If the `TrackStream` dropped first, its `Drop` found an empty slot, and the late `protect` was never undone. With counted protection that leak is permanent, and in Memory mode a leaked entry can never be evicted and may hold RAM over the limit. Task 4 closes the slot on drop. Test: Task 4, `stream_dropped_during_resolve_leaves_no_protection`.
 
 ---
 
@@ -125,7 +128,7 @@ git commit -m "audio: chunked shared buffer for the memory cache"
 **Interfaces:**
 - Consumes: Task 1 (`ChunkBuf`, `ChunkReader`); `crate::cache::CacheKey`.
 - Produces:
-  - `pub struct MemoryCache`. Its fields: `max_bytes: AtomicU64`, `committed_bytes: AtomicU64`, `pending: AtomicU64`, `entries: Mutex<HashMap<CacheKey, MemEntry>>` (`MemEntry { buf: Arc<ChunkBuf>, last_used: u64 }`), `protected: Mutex<HashSet<CacheKey>>`, `in_flight: Mutex<HashSet<CacheKey>>`, and `clock: AtomicU64`.
+  - `pub struct MemoryCache`. Its fields: `max_bytes: AtomicU64`, `committed_bytes: AtomicU64`, `pending: AtomicU64`, `entries: Mutex<HashMap<CacheKey, MemEntry>>` (`MemEntry { buf: Arc<ChunkBuf>, last_used: u64 }`), `protected: Mutex<HashMap<CacheKey, u32>>` (a holder count per key; see Review Focus 6), `in_flight: Mutex<HashSet<CacheKey>>`, and `clock: AtomicU64`.
   - `MemoryCache::new(max_bytes: u64) -> Arc<MemoryCache>`
   - `fn lookup(&self, key: &CacheKey) -> Option<ChunkReader>` (bumps `last_used`)
   - `fn begin_write(self: &Arc<Self>, key: &CacheKey) -> Option<MemWriter>` (`None` if a writer is already in flight for that key)
@@ -136,7 +139,10 @@ git commit -m "audio: chunked shared buffer for the memory cache"
   - `fn max_bytes(&self) -> u64`
   - `fn size_bytes(&self) -> u64` (committed bytes)
   - `fn pending_bytes(&self) -> u64` (in-flight plus scratch bytes)
-  - `fn protect(&self, key: &CacheKey)`, `fn unprotect(&self, key: &CacheKey)` (unprotect runs the eviction), `fn is_protected(&self, key: &CacheKey) -> bool`
+  - `fn protect(&self, key: &CacheKey)` adds one holder.
+  - `fn unprotect(&self, key: &CacheKey)` removes one holder. The count saturates at zero, so unprotecting an unprotected key is a no-op. When the count reaches zero the key leaves the map and `evict_to_fit` runs.
+  - `fn is_protected(&self, key: &CacheKey) -> bool` is true while the count is above zero.
+  - This refines the spec's "`protect`/`unprotect` work as on disk": callers still pair one `unprotect` with each `protect`, but two holders of one key no longer cancel each other. `DiskCache` keeps its set.
   - `pub struct MemWriter`:
     - `fn write_all(&mut self, data: &[u8]) -> io::Result<()>`
     - `fn bytes(&self) -> u64`
@@ -166,6 +172,8 @@ evict_to_fit():         // also run by set_max_bytes and unprotect
 
 Evicting only drops the map's `Arc`; a live `ChunkReader` keeps the bytes until it drops. The sidecar is not stored.
 
+An entry bigger than the whole limit: by the time it commits, `reserve` has already evicted every unprotected entry while it downloaded, so `commit`'s `evict_to_fit` finds nothing more to evict. The entry then stays only while it is protected. The spec's "kept only if eviction can bring the total back under" needs no extra rule.
+
 - [ ] **Step 1: Write the failing tests**
 
 Use 1 KiB entries and small limits. Each test's name and assertions:
@@ -180,6 +188,8 @@ Use 1 KiB entries and small limits. Each test's name and assertions:
 - `clear_keeps_live_readers_valid`: hold a reader from `lookup(a)`, call `clear()`. `size_bytes() == 0`, `lookup(a)` is `None`, and the reader reads all bytes.
 - `scratch_counts_as_pending_and_frees_on_drop`: a scratch writes 700 bytes, so `pending_bytes() == 700`; after the drop, `0`. A scratch never shows up in `lookup`.
 - `scratch_write_evicts_like_a_cache_write`: limit 1500; commit `a` (1000 bytes, unprotected); a scratch writes 1000 bytes, so `a` is evicted.
+- `protection_is_counted_per_holder`: limit 1000; commit `a` (800 bytes); `protect(a)` twice, then `unprotect(a)` once. `is_protected(a)` is still true, and a 600-byte write for `b` leaves `a` in place. After the second `unprotect(a)`, `is_protected(a)` is false and `a` is evicted (800 + 600 > 1000).
+- `unprotect_without_protect_is_a_no_op`: `unprotect(a)` on a key that was never protected, then `protect(a)` once. `is_protected(a)` is true, so the count did not go below zero.
 
 - [ ] **Step 2: Run the tests and check they fail**
 
@@ -244,6 +254,10 @@ git commit -m "audio: in-memory track cache with a RAM budget"
   - `feed(buffer, reader: SpillReader, progress)`
 - `DiskCache::new` stays public (for tests). The app and engine hold `Arc<TrackCache>`.
 
+- [ ] **Step 0: Record the audio test count before touching anything**
+
+Run: `cargo test -p oxitide-audio 2>&1 | grep "test result"` and note the passed count for each suite. Step 2 compares against it.
+
 - [ ] **Step 1: Switch the types and call sites**
 
 Point the existing `fetch.rs` and `engine.rs` tests at `TrackCache::disk(..)` and `AheadSink::Cache(TrackWriter::Disk(..))`, so they compile against the new API. They stay Disk-only for now. Then change the production types as listed under Interfaces.
@@ -253,48 +267,76 @@ Point the existing `fetch.rs` and `engine.rs` tests at `TrackCache::disk(..)` an
 - [ ] **Step 2: Run the whole audio suite and check it passes unchanged**
 
 Run: `cargo test -p oxitide-audio`
-Expected: PASS, with the same test count as before the change (compare with `git stash; cargo test -p oxitide-audio 2>&1 | grep "test result"`).
+Expected: PASS, with the same counts as recorded in Step 0.
 
-- [ ] **Step 3: Run clippy on the workspace**
+- [ ] **Step 3: Switch the app crate and run clippy on the workspace**
+
+The app crate names `DiskCache` and won't compile until it is switched. Change these to `TrackCache` and `TrackCache::disk(..)` in this task, leaving the behaviour as it is:
+- `state.rs`: lines 6, 46, 177 and 181.
+- `commands.rs`: the import at line 3; `require_cache` at line 89; and the `cache` parameters of `replace_player` (line 422) and `build_player` (line 437).
+- `player.rs`: the import at line 3 and `build_cache` at line 19. The `build_cache` test at line 570 compares `cache.dir()` with a path; it becomes `Some(dir.as_path())`.
+- `commands.rs` `get_cache_status` at line 2909: `cache.dir()` is now an `Option`, so report `""` for `None` (Task 5 relies on this for Memory mode).
+
+`main.rs` needs no edit; its calls (`set_cache(build_cache(..))`, `cleanup`, `clear`) pick up the new type.
 
 Run: `cargo clippy --workspace --all-targets -- -D warnings`
-Expected: no warnings. The app crate may not compile yet if it names `DiskCache`. If so, change `state.rs:6,46,177,181`, `commands.rs:89` and `player.rs::build_cache` to `TrackCache` and `TrackCache::disk(..)` in this task, leaving the behaviour as it is.
+Expected: no warnings.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/oxitide-audio crates/oxitide-app/src/state.rs crates/oxitide-app/src/commands.rs crates/oxitide-app/src/player.rs
-git commit -m "audio: TrackCache facade; cache hits and spill read through readers, not paths"
+git add crates/oxitide-audio crates/oxitide-app/src/state.rs crates/oxitide-app/src/commands.rs crates/oxitide-app/src/player.rsgit commit -m "audio: TrackCache facade; cache hits and spill read through readers, not paths"
 ```
 
 ---
 
-### Task 4: Memory-mode scratch in the engine; end-to-end Memory tests
+### Task 4: Memory-mode scratch in the engine; protection slot; end-to-end Memory tests
 
 **Files:**
-- Modify: `crates/oxitide-audio/src/engine.rs` (scratch selection at lines 1636–1652)
+- Modify: `crates/oxitide-audio/src/engine.rs`: scratch selection at lines 1636–1652; the cache-key slot (`TrackStream.cache_key` at line 1152, its `Drop` at line 1277, and the two places that fill it, lines 1440 and 1549)
 - Test: `crates/oxitide-audio/src/fetch.rs` tests, `crates/oxitide-audio/src/engine.rs` tests
 
 **Interfaces:**
 - Consumes: Task 3 (`TrackCache::memory`, `AheadSink::MemScratch`, `TrackCache::backend`). Also `MemoryCache::scratch` via `TrackCache::Memory(m) => m.scratch()`; add `pub fn memory_scratch(&self) -> Option<MemScratch>` on `TrackCache` (`None` for Disk).
-- Produces: no new public API.
+- Produces: no new public API. Inside `engine.rs`, `Arc<Mutex<Option<CacheKey>>>` becomes a private `ProtectSlot`:
+  - `struct ProtectSlot { state: Mutex<SlotState> }`, where `enum SlotState { Empty, Held(CacheKey), Closed }`.
+  - `fn hold(&self, cache: &TrackCache, key: CacheKey)`: under the lock, `Empty` becomes `Held(key)` and calls `cache.protect(&key)`. On `Closed` it does nothing, because the stream is already gone.
+  - `fn close(&self, cache: &TrackCache)`: under the lock, `Held(key)` calls `cache.unprotect(&key)`, and any state becomes `Closed`. `TrackStream::drop` calls it.
+  - Lines 1440–1441 and 1549–1550 call `slot.hold(..)` in place of setting the slot and calling `protect`.
+  - This applies to both backends. In Disk mode it only changes the leak case (Review Focus 7), where a key used to stay protected after its stream was gone.
 
 - [ ] **Step 1: Write the failing tests**
+
+- **Fixtures for these tests.** `fixture_plan()` (line 3982) has one segment and `manifest_hash: None`, so it yields no cache key. Use these instead:
+  - `cached_plan(url, hash)` (line 4139) for tests that need a key. Pair it with `CountingFetcher` (line 4158) for the fetch count.
+  - `he_aac_fixture(..)` (line 4007, `manifest_hash: Some(0x96)`, init plus two media segments) for the seek test, which needs a second segment to seek into.
+- In `engine.rs`, `stream_dropped_during_resolve_leaves_no_protection`:
+  - Build the engine on a `TrackCache::memory(..)` with `GatedResolver` (line 6082) serving `cached_plan(..)`.
+  - Start a track with `PlayTracks` and wait until it is resolving (`wait_for_order`).
+  - Send `EngineCmd::Clear` so its `TrackStream` drops, then `gate.release(..)`.
+  - Wait for the decode thread to finish. Assert `!cache.is_protected(&key)`, where `key` is built from the plan's `manifest_hash`, the item's track id and the engine's quality.
+  - Without `ProtectSlot` the late `protect` sticks and the test fails.
 
 - In `fetch.rs`, `download_ahead_into_memory_publishes_the_whole_track`: this mirrors `download_ahead_fetches_the_whole_track_without_a_consumer` (line 1121), using `TrackCache::memory(1 << 30)`. Assert that `cache.lookup(&key)` reads back exactly the fixture bytes.
 - In `fetch.rs`, `memory_scratch_rides_out_a_network_drop`: this mirrors the existing Scratch network-drop test (the one using `ScratchFile` at line 1228), using `AheadSink::MemScratch(..)`. Assert the same buffer output, and that `pending_bytes() == 0` after the sink drops.
 - In `engine.rs`, add a helper `fn own_spill_files() -> usize`. It counts the files directly in `std::env::temp_dir()`, not recursively, whose name starts with `spill-{std::process::id()}-`. That is the only place Memory mode could leak to, since there is no cache dir. Disk-mode tests spill into their own cache subdirectories, so they don't affect the count.
-- In `engine.rs`, `memory_mode_replay_is_a_cache_hit_and_writes_no_files`: build the engine with `TrackCache::memory(64 << 20)`. Play a track to the end, then play it again. Assert that the second play fires `AudioPerfEvent::CacheHit` with no fetch (fetch counter unchanged), and that `own_spill_files()` is the same before and after.
-- In `engine.rs`, `memory_mode_seek_writes_no_files`: in Memory mode, start a track with `seek_ms = Some(..)`. Assert playback emits PCM, that `cache.pending_bytes() > 0` during the download, and that `own_spill_files()` is unchanged.
+- In `engine.rs`, `memory_mode_replay_is_a_cache_hit_and_writes_no_files`: build the engine with `TrackCache::memory(64 << 20)`, `cached_plan(..)` and `CountingFetcher`. Play a track to the end, then play it again. Assert that the second play fires `AudioPerfEvent::CacheHit` with no fetch (fetch counter unchanged), and that `own_spill_files()` is the same before and after.
+- In `engine.rs`, `memory_mode_seek_writes_no_files`: in Memory mode, start a track with `seek_ms = Some(..)`. Don't sample `pending_bytes()` while the download runs: the download can finish before the test looks, so such an assertion fails at random (AGENTS.md treats a flaky test as a bug). Instead, hold the download at a known point:
+  - Use `he_aac_fixture(..)` and seek to a position inside its first media segment (`mem://head`). `seek_ms` being `Some` is what routes the download to scratch (`engine.rs` line 1623), so the plan stays init, head and tail.
+  - Use a fetcher that serves `mem://init` and `mem://head`, then blocks on `mem://tail` until a `Gate` is released. That could be a new `HoldTailFetcher`, or `GatedFetcher` (line 7684) gating only one URL.
+  - While it is held, wait for PCM. Assert that `cache.pending_bytes()` equals the init plus head lengths (scratch bytes count as pending) and that `own_spill_files()` is unchanged.
+  - Release the gate and let the track end. Then assert `pending_bytes() == 0`, `size_bytes() == 0` (a seek-truncated plan is never cached) and that `own_spill_files()` is still unchanged.
 
 - [ ] **Step 2: Run the tests and check they fail**
 
-Run: `cargo test -p oxitide-audio memory_`
-Expected: the engine tests fail (a `spill-*.part` file is created).
+Run: `cargo test -p oxitide-audio memory_` and `cargo test -p oxitide-audio stream_dropped_during_resolve`
+Expected: the Memory-mode engine tests fail (a `spill-*.part` file is created), and the resolve test fails (the key is still protected).
 
 - [ ] **Step 3: Choose `AheadSink::MemScratch(scratch)` when `inner.cache.memory_scratch()` is `Some`, else today's `ScratchFile` path**
 
 Memory mode never reaches the `temp_dir()` fallback.
+
+- [ ] **Step 3b: Add `ProtectSlot` and switch `TrackStream` and the two fill sites to it**
 
 - [ ] **Step 4: Run the tests and check they pass**
 
@@ -305,7 +347,7 @@ Expected: PASS.
 
 ```bash
 git add crates/oxitide-audio/src/engine.rs crates/oxitide-audio/src/fetch.rs
-git commit -m "audio: memory mode keeps scratch downloads in RAM"
+git commit -m "audio: memory mode keeps scratch downloads in RAM; close the protection slot on drop"
 ```
 
 ---
@@ -494,6 +536,7 @@ git commit -m "ui: choose disk or memory cache storage in Settings"
 - Modify: `docs/agents/audio.md` (add a cache bullet next to the `download_ahead` bullet at line 16)
 - Modify: `docs/agents/app-shell.md` (persisted config: the `cache.backend` and `memory_max_size_mb` fields, and that the backend applies at start)
 - Create: `docs/superpowers/plans/notes/2026-11-27-memory-cache-smoke.md` with a `**Status:** open` line
+- Modify: `scripts/smoke/watch-cache.ps1` (watch several folders), `scripts/smoke/README.md`
 
 **Interfaces:** none.
 
@@ -509,15 +552,27 @@ In `app-shell.md`, one line on the config fields and that the backend applies at
 
 - [ ] **Step 2: Write the smoke checklist**
 
+First, let `scripts/smoke/watch-cache.ps1` watch more than one folder. Today its `-CacheDir` parameter takes one folder (default `%APPDATA%\OxiTide\config\cache`), and Memory mode's only possible leak is `%TEMP%`.
+- Make `-CacheDir` a `string[]` (keeping the default) and loop over it in both modes.
+- In `spill` mode, also report new `.part` files.
+- Update the usage lines at the top of the script, and `scripts/smoke/README.md`.
+
 For Windows, with backend Memory and the app restarted:
 - [ ] Settings shows "Memory" and "In memory", and the usage readout moves while a track plays.
-- [ ] Play, seek and skip back to the previous track: it starts with no network fetch (watch with `scripts/smoke/` log watcher).
-- [ ] A network toggle mid-track (`scripts/smoke/` network toggle) is ridden out in place.
+- [ ] Play, seek and skip back to the previous track: it starts with no network fetch (watch with `scripts/smoke/watch-log.ps1`).
+- [ ] Once the playing track has fully downloaded (the usage readout stops growing), seek within it and back: neither seek makes a network fetch. A seek before that point cancels the running download, so it is expected to fetch.
+- [ ] A network toggle mid-track (`scripts/smoke/net-toggle.ps1`) is ridden out in place.
 - [ ] A hi-res track longer than the limit plays to the end.
-- [ ] During all of the above, the cache dir and `%TEMP%` gain no `.part`, `.fmp4` or `spill-*` files (`scripts/smoke/` cache watcher).
+- [ ] During all of the above, the cache dir and `%TEMP%` gain no `.part`, `.fmp4` or `spill-*` files. Run `watch-cache.ps1 -Mode new` and `-Mode spill`, both with `-CacheDir "$env:APPDATA\OxiTide\config\cache","$env:TEMP"`.
 - [ ] Switching back to Disk and restarting brings the old disk entries back.
 
-Add one line for the Linux run (same checks, under `docs/linux-build.md` setup).
+The Linux run makes the same checks, set up as in `docs/linux-build.md`. The `scripts/smoke/` watchers are PowerShell, so the checklist gives a shell command for the file check. Run it from a stamp file made before the app starts (`touch /tmp/oxitide-stamp`), over the Linux cache dir (from `config.rs::default_cache_dir`, line 940) and `${TMPDIR:-/tmp}`:
+
+```bash
+find "$CACHE_DIR" "${TMPDIR:-/tmp}" -maxdepth 1 -newer /tmp/oxitide-stamp \( -name '*.part' -o -name '*.fmp4' -o -name 'spill-*' \)
+```
+
+Expected: no output. `docs/linux-build.md` names no network toggle, so toggle the link with `nmcli networking off` / `on` and record that in the checklist.
 
 - [ ] **Step 3: Run all the gates**
 
@@ -534,6 +589,6 @@ Expected: all exit 0. Then run `cargo test --workspace` and `cargo clippy --work
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs
+git add docs scripts/smoke
 git commit -m "docs: memory cache mode in the agent guides; smoke checklist"
 ```
