@@ -397,6 +397,40 @@ export function createAppearance(): Appearance {
     }
   }
 
+  function setMode(m: UiMode): Promise<void> {
+    mode = m;
+    writeMirror(themeStorage(), MODE_STORAGE_KEY, m);
+    return persist(async () => {
+      const look = await api.setUiMode(m);
+      // A newer switch owns the look; this answer is for a mode already left.
+      if (look && mode === m) applyLook(look);
+    });
+  }
+
+  function setDynamicColor(s: DynamicColorSetting): Promise<void> {
+    dynamicColorSetting = s;
+    return persist(() => api.setDynamicColor(s));
+  }
+
+  /// Picking Catppuccin also moves the window to Studio (Atmosphere's album-art
+  /// backdrop and glass paint over the palette, and Rack ignores it) and turns
+  /// Dynamic color off, so the album art doesn't tint over the flavour's accent.
+  /// Only the switch into Catppuccin does this; a flavour change, or a later
+  /// mode or colour choice, is left alone.
+  async function setTheme(t: ThemeSetting): Promise<void> {
+    const enteringCatppuccin = themeFlavour(t) !== null && themeFlavour(theme) === null;
+    theme = t;
+    writeThemeMirror(themeStorage(), t);
+    await Promise.all([persist(() => api.setTheme(t)), enteringCatppuccin ? catppuccinLook() : undefined]);
+  }
+
+  async function catppuccinLook(): Promise<void> {
+    // Dynamic color is part of each mode's look, so it is turned off only once
+    // the switch has landed; Studio's stored look would overwrite it otherwise.
+    if (mode !== "instrument") await setMode("instrument");
+    if (dynamicColorSetting !== "off") await setDynamicColor("off");
+  }
+
   /// Local-first; a failed persist reverts so the UI never disagrees with the
   /// stored config. The stored (clamped) value wins on success.
   async function setRack(patch: Partial<RackSettings>): Promise<void> {
@@ -449,16 +483,8 @@ export function createAppearance(): Appearance {
     init,
     setRack,
     setZoom,
-    setMode: (m) => {
-      mode = m;
-      writeMirror(themeStorage(), MODE_STORAGE_KEY, m);
-      return persist(async () => {
-        const look = await api.setUiMode(m);
-        // A newer switch owns the look; this answer is for a mode already left.
-        if (look && mode === m) applyLook(look);
-      });
-    },
-    setTheme: (t) => { theme = t; writeThemeMirror(themeStorage(), t); return persist(() => api.setTheme(t)); },
+    setMode,
+    setTheme,
     setInstrumentTone: (t) => {
       instrumentTone = t;
       writeMirror(themeStorage(), TONE_STORAGE_KEY, t);
@@ -468,7 +494,7 @@ export function createAppearance(): Appearance {
     setCustomTypeface: (n) => { customTypeface = n; return persist(() => api.setCustomTypeface(n)); },
     setDensity: (d) => { density = d; return persist(() => api.setDensity(d)); },
     setCoverShape: (s) => { coverShape = s; return persist(() => api.setCoverShape(s)); },
-    setDynamicColor: (s) => { dynamicColorSetting = s; return persist(() => api.setDynamicColor(s)); },
+    setDynamicColor,
     setQueueWidth: (px) => { queueWidth = clampQueueWidth(px); return persist(() => api.setQueueWidth(queueWidth)); },
     setOneko,
     setCatjam,

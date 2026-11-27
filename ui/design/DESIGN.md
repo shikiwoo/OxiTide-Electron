@@ -33,7 +33,11 @@ current system and must be updated in the same change that alters it.
    dark theme reads it, and never under a Catppuccin palette.
    **Catppuccin** (Settings → Theme → Catppuccin, then Flavor) adds `data-palette`
    (`latte | frappe | macchiato | mocha | mocha-oled`; `ui.theme =
-   "catppuccin-<flavor>"`). Latte resolves `data-theme="light"`, the rest `dark`, so
+   "catppuccin-<flavor>"`). Switching the theme into Catppuccin also switches the mode
+   to Studio and then turns Studio's Dynamic colour off (`appearance.setTheme`), since
+   Atmosphere's album-art backdrop and glass paint over the palette, Rack ignores it,
+   and album-art tint would replace the flavour's accent; a flavour change or a later
+   mode or colour choice is left alone. Latte resolves `data-theme="light"`, the rest `dark`, so
    everything keyed on the theme (cover analysis, hero scrims, Dynamic colour) keeps
    working. `catppuccin.css` feeds each flavour's colours (private `--ctp-*` inputs:
    Base, Mantle, Crust, Text, a muted text, Mauve accent, Red/Green/Yellow, and a "lift"

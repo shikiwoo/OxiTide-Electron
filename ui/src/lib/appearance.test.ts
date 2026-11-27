@@ -22,6 +22,7 @@ vi.mock("./api", () => ({
     setCatjamScale: vi.fn(),
     setZoom: vi.fn(),
     setTheme: vi.fn(),
+    setDynamicColor: vi.fn(),
     setUiMode: vi.fn(),
     setInstrumentTone: vi.fn(),
     setRackSettings: vi.fn(),
@@ -428,6 +429,65 @@ describe("theme", () => {
     expect(appearance.resolvedTheme).toBe("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(api.setTheme).toHaveBeenCalledWith("dark");
+  });
+
+  /// Atmosphere's album-art backdrop and glass would paint over the palette,
+  /// and album-art tint over its accent, so picking Catppuccin also moves the
+  /// window to Studio and turns Dynamic color off.
+  it("switching to Catppuccin switches to Studio and turns Dynamic color off", async () => {
+    // Studio's stored look has Dynamic color on; the switch must not undo "off".
+    vi.mocked(api.setUiMode).mockResolvedValue({
+      typeface: "auto", custom_typeface: "", density: "comfortable", row_separators: true,
+      cover_shape: "disc", player_bar_style: "docked", queue_style: "docked",
+      hover_panels: false, dynamic_color: "full",
+    } as never);
+    vi.mocked(api.setDynamicColor).mockResolvedValue(undefined as never);
+    const appearance = createAppearance();
+    await appearance.init();
+    expect(appearance.mode).toBe("atmosphere");
+    await appearance.setTheme("catppuccin-mocha");
+    expect(appearance.mode).toBe("instrument");
+    expect(document.documentElement.dataset.mode).toBe("instrument");
+    expect(appearance.dynamicColorSetting).toBe("off");
+    expect(api.setTheme).toHaveBeenCalledWith("catppuccin-mocha");
+    expect(api.setUiMode).toHaveBeenCalledWith("instrument");
+    expect(api.setDynamicColor).toHaveBeenCalledWith("off");
+    // The backend swaps the look on a mode switch, so "off" must land after it.
+    expect(vi.mocked(api.setUiMode).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(api.setDynamicColor).mock.invocationCallOrder[0]);
+  });
+
+  it("a flavour change within Catppuccin leaves the mode and Dynamic color alone", async () => {
+    vi.mocked(api.getConfig).mockResolvedValue({
+      ui: { mode: "atmosphere", theme: "catppuccin-latte", dynamic_color: "full" },
+    } as never);
+    const appearance = createAppearance();
+    await appearance.init();
+    await appearance.setTheme("catppuccin-frappe");
+    expect(appearance.mode).toBe("atmosphere");
+    expect(appearance.dynamicColorSetting).toBe("full");
+    expect(api.setUiMode).not.toHaveBeenCalled();
+    expect(api.setDynamicColor).not.toHaveBeenCalled();
+  });
+
+  it("switching to Catppuccin in Studio keeps the mode and only turns Dynamic color off", async () => {
+    vi.mocked(api.getConfig).mockResolvedValue({ ui: { mode: "instrument", theme: "dark", dynamic_color: "accent" } } as never);
+    vi.mocked(api.setDynamicColor).mockResolvedValue(undefined as never);
+    const appearance = createAppearance();
+    await appearance.init();
+    await appearance.setTheme("catppuccin-mocha");
+    expect(appearance.mode).toBe("instrument");
+    expect(appearance.dynamicColorSetting).toBe("off");
+    expect(api.setUiMode).not.toHaveBeenCalled();
+    expect(api.setDynamicColor).toHaveBeenCalledWith("off");
+  });
+
+  it("Dynamic color already off is not re-sent", async () => {
+    vi.mocked(api.getConfig).mockResolvedValue({ ui: { mode: "instrument", theme: "dark", dynamic_color: "off" } } as never);
+    const appearance = createAppearance();
+    await appearance.init();
+    await appearance.setTheme("catppuccin-mocha");
+    expect(api.setDynamicColor).not.toHaveBeenCalled();
   });
 
   /// An embedder may throw on the localStorage property getter itself, before
