@@ -717,13 +717,25 @@ impl Default for UiConfig {
     }
 }
 
+/// The Memory cache limit's range, in MB: room for a lossless track plus a
+/// prefetch at the bottom.
+pub const MEMORY_CACHE_MIN_MB: u64 = 256;
+pub const MEMORY_CACHE_MAX_MB: u64 = 4096;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CacheConfig {
     /// Empty string means `%APPDATA%\OxiTide\cache`.
     pub dir: String,
+    /// The disk cache's limit.
     pub max_size_mb: u64,
     pub clear_on_exit: bool,
+    /// Where cached tracks live. Applied at startup; a change takes effect
+    /// after a restart.
+    pub backend: CacheBackendSetting,
+    /// The Memory cache's RAM budget; separate from `max_size_mb`, so
+    /// switching never turns a disk limit into a RAM budget.
+    pub memory_max_size_mb: u64,
 }
 
 impl Default for CacheConfig {
@@ -732,7 +744,45 @@ impl Default for CacheConfig {
             dir: String::new(),
             max_size_mb: 2048,
             clear_on_exit: false,
+            backend: CacheBackendSetting::Disk,
+            memory_max_size_mb: 512,
         }
+    }
+}
+
+/// `cache.backend`: `"disk"` (the default) or `"memory"`, in which no audio
+/// bytes are written to disk.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CacheBackendSetting {
+    #[default]
+    Disk,
+    Memory,
+}
+
+impl CacheBackendSetting {
+    pub fn to_backend(self) -> oxitide_audio::cache::CacheBackend {
+        match self {
+            Self::Disk => oxitide_audio::cache::CacheBackend::Disk,
+            Self::Memory => oxitide_audio::cache::CacheBackend::Memory,
+        }
+    }
+}
+
+/// Lenient: an unknown name (a typo in a hand-edited config) falls back to
+/// Disk with a warning, instead of failing the whole file and sending it
+/// through the malformed-config backup.
+impl<'de> Deserialize<'de> for CacheBackendSetting {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = String::deserialize(deserializer)?;
+        Ok(match name.as_str() {
+            "disk" => Self::Disk,
+            "memory" => Self::Memory,
+            other => {
+                tracing::warn!("unknown cache.backend {other:?}; using the disk cache");
+                Self::Disk
+            }
+        })
     }
 }
 
@@ -1055,6 +1105,8 @@ mod tests {
                 dir: "D:\\cache".into(),
                 max_size_mb: 512,
                 clear_on_exit: true,
+                backend: CacheBackendSetting::Memory,
+                memory_max_size_mb: 768,
             },
             integrations: IntegrationsConfig {
                 smtc: false,
@@ -2057,5 +2109,42 @@ analyzer = \"waterfall\"
         }
         .clamped();
         assert_eq!(rack.lamp_brightness, LAMP_BRIGHTNESS_MIN);
+    }
+
+    #[test]
+    fn cache_config_defaults_to_disk_with_a_512_mb_memory_limit() {
+        let c = CacheConfig::default();
+        assert_eq!(c.backend, CacheBackendSetting::Disk);
+        assert_eq!(c.memory_max_size_mb, 512);
+    }
+
+    #[test]
+    fn cache_backend_round_trips_through_toml() {
+        let mut config = Config::default();
+        config.cache.backend = CacheBackendSetting::Memory;
+        let text = toml::to_string(&config).unwrap();
+        assert!(text.contains("backend = \"memory\""));
+        let back: Config = toml::from_str(&text).unwrap();
+        assert_eq!(back.cache.backend, CacheBackendSetting::Memory);
+    }
+
+    /// Review Focus 4: a typo must not reset the whole config through the
+    /// malformed-config backup path.
+    #[test]
+    fn unknown_cache_backend_falls_back_to_disk() {
+        let back: Config =
+            toml::from_str("[cache]\nbackend = \"ram\"\nmax_size_mb = 1024\n").unwrap();
+        assert_eq!(back.cache.backend, CacheBackendSetting::Disk);
+        assert_eq!(back.cache.max_size_mb, 1024); // the rest of the section survives
+    }
+
+    #[test]
+    fn cache_backend_setting_maps_to_the_audio_backend() {
+        use oxitide_audio::cache::CacheBackend;
+        assert_eq!(CacheBackendSetting::Disk.to_backend(), CacheBackend::Disk);
+        assert_eq!(
+            CacheBackendSetting::Memory.to_backend(),
+            CacheBackend::Memory
+        );
     }
 }

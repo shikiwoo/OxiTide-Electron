@@ -493,13 +493,20 @@ export interface DspSettings {
   replay_gain: ReplayGainSettings;
   crossfade: CrossfadeSettings;
 }
+/// Where cached tracks live (`CacheBackend` in cache.rs; `cache.backend` in config).
+export type CacheBackend = "disk" | "memory";
 export interface CacheStatus {
+  /// "" in Memory mode.
   dir: string;
   used_bytes: number;
   pending_bytes: number;
   max_bytes: number;
   usable: boolean;
   configured_dir: string;
+  /// The running backend.
+  backend: CacheBackend;
+  /// The backend the next start uses.
+  configured_backend: CacheBackend;
 }
 /// The jamming cat's coat (`CatjamCoat` in config.rs; frames in catjamSprite.ts).
 export type CatjamCoat = "white" | "black" | "ginger" | "grey" | "tuxedo" | "cream";
@@ -573,7 +580,13 @@ export interface Config {
     smtc: boolean;
     discord: boolean;
   };
-  cache: { dir: string; max_size_mb: number; clear_on_exit: boolean };
+  cache: {
+    dir: string;
+    max_size_mb: number;
+    clear_on_exit: boolean;
+    backend: CacheBackend;
+    memory_max_size_mb: number;
+  };
   scrobbling: {
     lastfm_enabled: boolean;
     listenbrainz_enabled: boolean;
@@ -1031,6 +1044,10 @@ export const api = {
   setHotkeyCapture: (active: boolean) => invoke<void>("set_hotkey_capture", { active }),
   setDiscord: (enabled: boolean) => invoke<void>("set_discord", { enabled }),
   setCacheMaxSizeMb: (mb: number) => invoke<void>("set_cache_max_size_mb", { mb }),
+  setCacheMemoryMaxSizeMb: (mb: number) =>
+    invoke<void>("set_cache_memory_max_size_mb", { mb }),
+  /// Saved for the next start; the running cache keeps its backend.
+  setCacheBackend: (backend: CacheBackend) => invoke<void>("set_cache_backend", { backend }),
   setCacheClearOnExit: (enabled: boolean) =>
     invoke<void>("set_cache_clear_on_exit", { enabled }),
   getCacheStatus: () => invoke<CacheStatus>("get_cache_status"),

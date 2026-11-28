@@ -870,6 +870,8 @@ mod tests {
         "set_hotkey_capture",
         "set_cache_max_size_mb",
         "set_cache_clear_on_exit",
+        "set_cache_memory_max_size_mb",
+        "set_cache_backend",
         "get_logs_dir",
         "open_logs_folder",
         "get_diagnostics",

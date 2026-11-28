@@ -889,6 +889,41 @@
     "source": "fce02e57",
     "draft": "1ba58e00"
   },
+  "settings.cacheLocation.memory": {
+    "status": "machine",
+    "source": "33835f58",
+    "draft": "2694b9e6"
+  },
+  "settings.cacheUsage.memoryLabel": {
+    "status": "machine",
+    "source": "46e2c42a",
+    "draft": "436d22b6"
+  },
+  "settings.cacheBackend.label": {
+    "status": "machine",
+    "source": "a2ef680b",
+    "draft": "a58f8aba"
+  },
+  "settings.cacheBackend.disk": {
+    "status": "machine",
+    "source": "340e0cf3",
+    "draft": "62571160"
+  },
+  "settings.cacheBackend.memory": {
+    "status": "machine",
+    "source": "c3963aed",
+    "draft": "03163333"
+  },
+  "settings.cacheBackend.description": {
+    "status": "machine",
+    "source": "561daedc",
+    "draft": "1495f69e"
+  },
+  "settings.cacheBackend.restart": {
+    "status": "machine",
+    "source": "4a786e13",
+    "draft": "cf1a51b5"
+  },
   "settings.cacheStatusUnavailable.label": {
     "status": "machine",
     "source": "c7d433c8",
@@ -2248,6 +2283,11 @@
     "status": "machine",
     "source": "1738de32",
     "draft": "fea0ccd4"
+  },
+  "settings.keywords.cacheBackend": {
+    "status": "machine",
+    "source": "6578004c",
+    "draft": "b86a2b11"
   },
   "settings.keywords.historyRecord": {
     "status": "machine",

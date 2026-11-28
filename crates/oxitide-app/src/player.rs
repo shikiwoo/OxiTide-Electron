@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use oxitide_audio::cache::DiskCache;
+use oxitide_audio::cache::TrackCache;
 use oxitide_audio::devices::{DeviceCaps, DeviceGroup, DeviceKind, Transport};
 use oxitide_audio::engine::{EngineEvent, PlaybackState, StreamResolver};
 use oxitide_audio::output::{self, AudioOutput, OutputDevice, OutputMode};
@@ -10,24 +10,36 @@ use oxitide_tidal::client::TidalClient;
 use oxitide_tidal::stream::Quality;
 use serde::{Deserialize, Serialize};
 
-use crate::config::{default_cache_dir, AudioConfig, Config};
+use crate::config::{
+    default_cache_dir, AudioConfig, CacheBackendSetting, Config, MEMORY_CACHE_MAX_MB,
+    MEMORY_CACHE_MIN_MB,
+};
 
-/// Build the disk cache from config: the configured directory when usable,
-/// else the default, else a temp directory. `DiskCache::new` is infallible.
-/// The stale-`.part` sweep and cap enforcement (`cleanup`) run on the startup
-/// background thread after the window is shown; see `main.rs`.
-pub fn build_cache(config: &Config) -> Arc<DiskCache> {
+/// Build the track cache from config. Memory mode: a RAM cache with the
+/// clamped `memory_max_size_mb` budget. Disk mode: the configured directory
+/// when usable, else the default, else a temp directory. Both are
+/// infallible. The stale-`.part` sweep and cap enforcement (`cleanup`, a
+/// no-op in Memory mode) run on the startup background thread after the
+/// window is shown; see `main.rs`.
+pub fn build_cache(config: &Config) -> Arc<TrackCache> {
+    if config.cache.backend == CacheBackendSetting::Memory {
+        let mb = config
+            .cache
+            .memory_max_size_mb
+            .clamp(MEMORY_CACHE_MIN_MB, MEMORY_CACHE_MAX_MB);
+        return TrackCache::memory(mb * 1024 * 1024);
+    }
     let max_bytes = config.cache.max_size_mb.saturating_mul(1024 * 1024);
     let configured = config.cache.dir.trim();
     if !configured.is_empty() {
-        let cache = DiskCache::new(std::path::PathBuf::from(configured), max_bytes);
+        let cache = TrackCache::disk(std::path::PathBuf::from(configured), max_bytes);
         if cache.usable() {
             return cache;
         }
         tracing::warn!("configured cache dir is unusable; falling back to the default");
     }
     let dir = default_cache_dir().unwrap_or_else(|| std::env::temp_dir().join("oxitide-cache"));
-    DiskCache::new(dir, max_bytes)
+    TrackCache::disk(dir, max_bytes)
 }
 
 /// Resolves a track's stream plan using a `TidalClient`. Runs the async client
@@ -551,6 +563,22 @@ mod tests {
     }
 
     #[test]
+    fn build_cache_memory_backend_is_memory_and_clamped() {
+        use crate::config::CacheBackendSetting;
+        use oxitide_audio::cache::CacheBackend;
+        let mut config = Config::default();
+        config.cache.backend = CacheBackendSetting::Memory;
+        config.cache.memory_max_size_mb = 10;
+        let cache = build_cache(&config);
+        assert_eq!(cache.backend(), CacheBackend::Memory);
+        assert_eq!(cache.max_bytes(), 256 * 1024 * 1024);
+        assert_eq!(cache.dir(), None);
+
+        config.cache.memory_max_size_mb = 100_000;
+        assert_eq!(build_cache(&config).max_bytes(), 4096 * 1024 * 1024);
+    }
+
+    #[test]
     fn build_cache_selects_the_directory_and_cleanup_sweeps_stale_parts() {
         let dir =
             std::env::temp_dir().join(format!("oxitide-build-cache-test-{}", std::process::id()));
@@ -567,7 +595,7 @@ mod tests {
         config.cache.max_size_mb = 1;
 
         let cache = build_cache(&config);
-        assert_eq!(cache.dir(), dir.as_path());
+        assert_eq!(cache.dir(), Some(dir.as_path()));
         assert_eq!(cache.max_bytes(), 1024 * 1024);
         assert!(part.exists(), "build_cache must not scan the directory");
         cache.cleanup();

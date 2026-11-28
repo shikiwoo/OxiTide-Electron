@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use oxitide_audio::cache::DiskCache;
+use oxitide_audio::cache::{CacheBackend, TrackCache};
 use oxitide_audio::devices::DeviceGroup;
 use oxitide_audio::dsp::{DspSettings, TransitionStyle};
 use oxitide_audio::engine::{Engine, EngineCmd, EngineEvent};
@@ -22,8 +22,9 @@ use tauri::{Emitter, Manager, State};
 
 use crate::artwork::PaletteDto;
 use crate::config::{
-    clamp_catjam_scale, clamp_queue_width, CatjamCoat, Config, CoverShape, Density, DynamicColor,
-    InstrumentTone, ModeLook, PanelStyle, QualityDisplay, RackConfig, Theme, Typeface, UiMode,
+    clamp_catjam_scale, clamp_queue_width, CacheBackendSetting, CatjamCoat, Config, CoverShape,
+    Density, DynamicColor, InstrumentTone, ModeLook, PanelStyle, QualityDisplay, RackConfig, Theme,
+    Typeface, UiMode, MEMORY_CACHE_MAX_MB, MEMORY_CACHE_MIN_MB,
 };
 use crate::lyrics::{LyricsDto, LyricsRequest};
 use crate::player::{device_list_dto, OutputDeviceListDto, QualityDto};
@@ -76,6 +77,11 @@ pub struct CacheStatusDto {
     /// The raw configured `cache.dir` ("" = default), so the UI can tell when
     /// the configured directory was rejected and a fallback is in use.
     pub configured_dir: String,
+    /// The running backend. `dir` is "" when it is Memory.
+    pub backend: CacheBackend,
+    /// The backend the next start uses; differs from `backend` after a
+    /// switch until the app restarts.
+    pub configured_backend: CacheBackend,
 }
 
 #[derive(Serialize)]
@@ -86,7 +92,7 @@ pub struct TrackPageDto {
     pub limit: u32,
 }
 
-fn require_cache(state: &State<'_, AppState>) -> Result<Arc<DiskCache>, String> {
+fn require_cache(state: &State<'_, AppState>) -> Result<Arc<TrackCache>, String> {
     state.cache().ok_or_else(|| "cache unavailable".to_string())
 }
 
@@ -419,7 +425,7 @@ fn replace_player(
     state: &AppState,
     client: TidalClient,
     config: &Config,
-    cache: Arc<DiskCache>,
+    cache: Arc<TrackCache>,
 ) -> Result<Player, String> {
     if let Some(old) = state.player() {
         old.engine.shutdown();
@@ -434,7 +440,7 @@ fn build_player(
     app: &tauri::AppHandle,
     client: TidalClient,
     config: &Config,
-    cache: Arc<DiskCache>,
+    cache: Arc<TrackCache>,
 ) -> Result<Player, String> {
     let resolver = crate::player::TidalResolver::new(client).map_err(|e| e.to_string())?;
     let engine = Engine::new(
@@ -2906,12 +2912,17 @@ pub fn get_audio_status(state: State<'_, AppState>) -> Result<AudioStatusDto, St
 pub fn get_cache_status(state: State<'_, AppState>) -> Result<CacheStatusDto, String> {
     let cache = require_cache(&state)?;
     Ok(CacheStatusDto {
-        dir: cache.dir().display().to_string(),
+        dir: cache
+            .dir()
+            .map(|dir| dir.display().to_string())
+            .unwrap_or_default(),
         used_bytes: cache.size_bytes(),
         pending_bytes: cache.pending_bytes(),
         max_bytes: cache.max_bytes(),
         usable: cache.usable(),
         configured_dir: state.config().cache.dir.clone(),
+        backend: cache.backend(),
+        configured_backend: state.config().cache.backend.to_backend(),
     })
 }
 
@@ -3367,11 +3378,45 @@ pub fn set_hotkey_capture(
     })
 }
 
+/// The disk cache's limit; applied live only while the disk cache runs.
 #[tauri::command]
 pub fn set_cache_max_size_mb(state: State<'_, AppState>, mb: u64) -> Result<(), String> {
-    require_cache(&state)?.set_max_bytes(mb.saturating_mul(1024 * 1024));
+    let cache = require_cache(&state)?;
+    if cache.backend() == CacheBackend::Disk {
+        cache.set_max_bytes(mb.saturating_mul(1024 * 1024));
+    }
     let mut config = state.config();
     config.cache.max_size_mb = mb;
+    config.save()?;
+    state.set_config(config);
+    Ok(())
+}
+
+/// The Memory cache's RAM budget, clamped to its range; applied live only
+/// while the memory cache runs.
+#[tauri::command]
+pub fn set_cache_memory_max_size_mb(state: State<'_, AppState>, mb: u64) -> Result<(), String> {
+    let mb = mb.clamp(MEMORY_CACHE_MIN_MB, MEMORY_CACHE_MAX_MB);
+    let cache = require_cache(&state)?;
+    if cache.backend() == CacheBackend::Memory {
+        cache.set_max_bytes(mb * 1024 * 1024);
+    }
+    let mut config = state.config();
+    config.cache.memory_max_size_mb = mb;
+    config.save()?;
+    state.set_config(config);
+    Ok(())
+}
+
+/// Saves where cached tracks live. The running cache keeps its backend; the
+/// new one is built at the next start (`player::build_cache`).
+#[tauri::command]
+pub fn set_cache_backend(
+    state: State<'_, AppState>,
+    backend: CacheBackendSetting,
+) -> Result<(), String> {
+    let mut config = state.config();
+    config.cache.backend = backend;
     config.save()?;
     state.set_config(config);
     Ok(())
@@ -3745,6 +3790,10 @@ mod tests {
         "set_close_to_tray",
         "set_cache_max_size_mb",
         "set_cache_clear_on_exit",
+        // Config writers (read-modify-write of the whole config); the first
+        // also retunes the running cache.
+        "set_cache_memory_max_size_mb",
+        "set_cache_backend",
         "get_remote_status",
         "begin_remote_pairing",
         "cancel_remote_pairing",
@@ -4067,10 +4116,14 @@ mod tests {
             max_bytes: 100,
             usable: true,
             configured_dir: String::new(),
+            backend: CacheBackend::Memory,
+            configured_backend: CacheBackend::Disk,
         };
         let value = serde_json::to_value(&dto).unwrap();
         assert_eq!(value["used_bytes"], 10);
         assert_eq!(value["pending_bytes"], 5);
+        assert_eq!(value["backend"], "memory");
+        assert_eq!(value["configured_backend"], "disk");
     }
 
     #[test]

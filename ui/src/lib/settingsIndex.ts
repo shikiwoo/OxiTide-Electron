@@ -124,6 +124,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   e("remote-approve", "connections", "settings.section.phoneRemote", "settings.remoteApprove.label", "settings.keywords.remoteApprove"),
   e("remote-devices", "connections", "settings.section.phoneRemote", "settings.remoteDevices.label", "settings.keywords.remoteDevices"),
 
+  e("cache-backend", "storage", "settings.section.cache", "settings.cacheBackend.label", "settings.keywords.cacheBackend"),
   e("cache-usage", "storage", "settings.section.cache", "settings.cacheUsage.label", "settings.keywords.cacheUsage"),
   e("cache-max", "storage", "settings.section.cache", "settings.cacheMaxLabel", "settings.keywords.cacheMax"),
   e("cache-clear-exit", "storage", "settings.section.cache", "settings.cacheClearExit.label", "settings.keywords.cacheClearExit"),

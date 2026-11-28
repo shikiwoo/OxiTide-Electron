@@ -619,6 +619,8 @@ fn main() {
             commands::set_hotkey_capture,
             commands::set_cache_max_size_mb,
             commands::set_cache_clear_on_exit,
+            commands::set_cache_memory_max_size_mb,
+            commands::set_cache_backend,
             commands::get_custom_titlebar,
             commands::set_snap_target,
             commands::get_logs_dir,

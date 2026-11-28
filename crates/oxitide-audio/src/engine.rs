@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use crate::automix::{self, Clip, Rendered, TransitionKind, TransitionPlan, TransitionReport};
 use crate::beat::{self, BeatClock, BeatTap, Window as BeatWindow};
-use crate::cache::{CacheKey, DiskCache};
+use crate::cache::{CacheKey, CacheSource, TrackCache};
 use crate::decode::{PcmBuffer, PcmFormat, PcmSink, StreamInfo};
 use crate::dsp::{
     extend_normalized, replay_gain_linear, CrossfadeSettings, DspSettings, GainRide, MixShape,
@@ -240,7 +240,7 @@ struct Inner {
     queue: Mutex<Queue>,
     resolver: Arc<dyn StreamResolver>,
     fetcher: OnceLock<Arc<dyn Fetcher>>,
-    cache: Arc<DiskCache>,
+    cache: Arc<TrackCache>,
     /// Which download may run ahead of its decoder (see `fetch::AheadGate`).
     ahead_gate: Arc<AheadGate>,
     quality: Mutex<Quality>,
@@ -315,6 +315,9 @@ struct Inner {
     underrun_count: AtomicU64,
     /// Pending seek; consumed by the worker.
     seek_target: Mutex<Option<PendingSeek>>,
+    /// Cache entries a seek keeps protected across the session restart, until
+    /// the new session's first stream holds its own (`release_seek_hold`).
+    seek_hold: Mutex<Vec<CacheKey>>,
     /// Set while playback waits for the network (`PlaybackState.buffering`).
     reconnect: Mutex<Option<Reconnect>>,
     /// The current track ran out of audio while its download waits for the
@@ -486,7 +489,7 @@ impl Engine {
         make_fetcher: impl FnOnce() -> Arc<dyn Fetcher> + Send + 'static,
         mut output: Box<dyn AudioOutput>,
         quality: Quality,
-        cache: Arc<DiskCache>,
+        cache: Arc<TrackCache>,
         allow_fallback: bool,
     ) -> Self {
         let volume_control = Arc::new(VolumeControl::default());
@@ -531,6 +534,7 @@ impl Engine {
             underruns: Mutex::new(UnderrunTally::default()),
             underrun_count: AtomicU64::new(0),
             seek_target: Mutex::new(None),
+            seek_hold: Mutex::new(Vec::new()),
             reconnect: Mutex::new(None),
             stream_stalled: AtomicBool::new(false),
             ended: AtomicBool::new(false),
@@ -969,6 +973,17 @@ impl Engine {
                 // external controllers (SMTC clients) can replay a stale
                 // position, and clamping would turn that into a skip.
                 if let Some(item) = current.filter(|item| seek_in_range(item, ms)) {
+                    // The restart drops the playing stream before the next
+                    // session protects the key again: keep the entry
+                    // protected across that gap (the memory cache evicts on
+                    // unprotect). A newer seek's hold replaces this one.
+                    let quality = *self.inner.quality.lock().unwrap();
+                    let held = self.inner.cache.hold_track(item.track_id, quality);
+                    let released =
+                        std::mem::replace(&mut *self.inner.seek_hold.lock().unwrap(), held);
+                    for key in &released {
+                        self.inner.cache.unprotect(key);
+                    }
                     *self.inner.seek_target.lock().unwrap() = Some(PendingSeek {
                         track_id: item.track_id,
                         position_ms: ms,
@@ -1142,14 +1157,50 @@ enum StreamEvent {
     Samples(PcmBuffer),
 }
 
+/// The cache protection a [`TrackStream`] holds, shared with its decode
+/// thread. The thread learns the key only after the resolve, which can
+/// outlast the stream (a quick skip): once the stream has closed the slot, a
+/// late `hold` protects nothing, so the key is never left protected.
+#[derive(Default)]
+struct ProtectSlot {
+    state: Mutex<SlotState>,
+}
+
+#[derive(Default)]
+enum SlotState {
+    #[default]
+    Empty,
+    Held(CacheKey),
+    Closed,
+}
+
+impl ProtectSlot {
+    /// Protect `key` for the stream's lifetime, unless the stream is gone.
+    fn hold(&self, cache: &TrackCache, key: CacheKey) {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if matches!(*state, SlotState::Empty) {
+            cache.protect(&key);
+            *state = SlotState::Held(key);
+        }
+    }
+
+    /// The stream is gone: release its protection and refuse later holds.
+    fn close(&self, cache: &TrackCache) {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if let SlotState::Held(key) = std::mem::replace(&mut *state, SlotState::Closed) {
+            cache.unprotect(&key);
+        }
+    }
+}
+
 /// A running resolve/fetch/decode pipeline for one track.
 struct TrackStream {
     item: QueueItem,
     rx: Receiver<Result<StreamEvent>>,
     buffer: Arc<StreamBuffer>,
-    cache: Arc<DiskCache>,
+    cache: Arc<TrackCache>,
     /// The cache key this stream protects while it is alive, once resolved.
-    cache_key: Arc<Mutex<Option<CacheKey>>>,
+    cache_key: Arc<ProtectSlot>,
     /// Events pre-read from `rx` while this stream waits as the prefetch (the
     /// AutoMix head); every read consumes them first, in order.
     pending: VecDeque<Result<StreamEvent>>,
@@ -1273,9 +1324,7 @@ impl Drop for TrackStream {
         // abandoned (next/prev/seek/clear or track change), and release the
         // cache protection that kept the playing/prefetched file on disk.
         self.buffer.cancel();
-        if let Some(key) = self.cache_key.lock().unwrap().take() {
-            self.cache.unprotect(&key);
-        }
+        self.cache_key.close(&self.cache);
     }
 }
 
@@ -1301,7 +1350,7 @@ fn start_track_ranked(
     let ticket = inner.ahead_gate.register(priority);
     let (tx, rx) = std::sync::mpsc::sync_channel::<Result<StreamEvent>>(PREFETCH_BUFFERS);
     let buffer = StreamBuffer::new();
-    let cache_key = Arc::new(Mutex::new(None));
+    let cache_key = Arc::new(ProtectSlot::default());
     let stream = TrackStream {
         item: item.clone(),
         rx,
@@ -1358,7 +1407,7 @@ fn decode_track(
     seek_ms: Option<u64>,
     tx: SyncSender<Result<StreamEvent>>,
     buffer: Arc<StreamBuffer>,
-    cache_key_slot: Arc<Mutex<Option<CacheKey>>>,
+    cache_key_slot: Arc<ProtectSlot>,
     ticket: AheadTicket,
 ) {
     let quality = *inner.quality.lock().unwrap();
@@ -1437,26 +1486,25 @@ fn decode_track(
         manifest_hash,
     });
     if let Some(key) = cache_key {
-        *cache_key_slot.lock().unwrap() = Some(key);
-        inner.cache.protect(&key);
+        cache_key_slot.hold(&inner.cache, key);
     }
     match cache_key {
         Some(key) => match inner.cache.lookup(&key) {
-            Some(path) => {
+            Some(source) => {
                 fire_perf(
                     &inner,
                     AudioPerfEvent::CacheHit {
                         track_id: item.track_id,
                     },
                 );
-                let result = decode_from_file(
+                let result = decode_from_cache(
                     &inner,
                     &item,
                     mode,
                     generation,
                     seek_ms,
                     &tx,
-                    &path,
+                    source,
                     &plan,
                     plan.needs_he_aac(),
                 );
@@ -1525,7 +1573,7 @@ fn play_cached_offline(
     generation: u64,
     seek_ms: Option<u64>,
     tx: &SyncSender<Result<StreamEvent>>,
-    cache_key_slot: &Arc<Mutex<Option<CacheKey>>>,
+    cache_key_slot: &ProtectSlot,
 ) -> Option<std::result::Result<(), (Error, bool)>> {
     let (key, path, meta) = inner.cache.find_offline(item.track_id, quality)?;
     let from_sidecar = meta.and_then(|meta| {
@@ -1546,25 +1594,27 @@ fn play_cached_offline(
         "TIDAL unreachable; playing track {} from the cache",
         item.track_id
     );
-    *cache_key_slot.lock().unwrap() = Some(key);
-    inner.cache.protect(&key);
+    cache_key_slot.hold(&inner.cache, key);
     fire_perf(
         inner,
         AudioPerfEvent::CacheHit {
             track_id: item.track_id,
         },
     );
-    let result = decode_from_file(
-        inner,
-        item,
-        mode,
-        generation,
-        seek_ms,
-        tx,
-        &path,
-        &plan,
-        legacy_low || plan.needs_he_aac(),
-    );
+    let result = match CacheSource::open_file(&path) {
+        Ok(source) => decode_from_cache(
+            inner,
+            item,
+            mode,
+            generation,
+            seek_ms,
+            tx,
+            source,
+            &plan,
+            legacy_low || plan.needs_he_aac(),
+        ),
+        Err(e) => Err((e.into(), false)),
+    };
     if let Err((e, _)) = &result {
         if inner.generation.load(Ordering::SeqCst) == generation && !matches!(e, Error::Output(_)) {
             tracing::warn!(
@@ -1631,25 +1681,28 @@ fn decode_from_network(
         }),
         _ => None,
     };
-    // Download ahead to disk: the cache's temp file for a whole track, else
-    // a scratch file. Only without either does the stream stay paced to
+    // Download ahead: into the cache's writer for a whole track, else into
+    // scratch (a RAM buffer in Memory mode, which never touches the disk;
+    // a file otherwise). Only without either does the stream stay paced to
     // the decoder.
     let sink = match writer {
         Some(writer) => Some(AheadSink::Cache(writer)),
-        None => {
-            let dir = if inner.cache.usable() {
-                inner.cache.dir().to_path_buf()
-            } else {
-                std::env::temp_dir()
-            };
-            match ScratchFile::create(&dir) {
-                Ok(scratch) => Some(AheadSink::Scratch(scratch)),
-                Err(e) => {
-                    tracing::warn!("no download-ahead scratch file in {} ({e})", dir.display());
-                    None
+        None => match inner.cache.memory_scratch() {
+            Some(scratch) => Some(AheadSink::MemScratch(scratch)),
+            None => {
+                let dir = match inner.cache.dir() {
+                    Some(dir) if inner.cache.usable() => dir.to_path_buf(),
+                    _ => std::env::temp_dir(),
+                };
+                match ScratchFile::create(&dir) {
+                    Ok(scratch) => Some(AheadSink::Scratch(scratch)),
+                    Err(e) => {
+                        tracing::warn!("no download-ahead scratch file in {} ({e})", dir.display());
+                        None
+                    }
                 }
             }
-        }
+        },
     };
     // New signed links for the same stream, cut like `download_plan`, so a
     // download that lost the network continues where it stopped.
@@ -1720,19 +1773,18 @@ fn decode_from_network(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn decode_from_file(
+fn decode_from_cache(
     inner: &Arc<Inner>,
     item: &QueueItem,
     mode: OutputMode,
     generation: u64,
     seek_ms: Option<u64>,
     tx: &SyncSender<Result<StreamEvent>>,
-    path: &std::path::Path,
+    source: CacheSource,
     plan: &StreamPlan,
     he_aac: bool,
 ) -> std::result::Result<(), (Error, bool)> {
-    let len = std::fs::metadata(path).map(|meta| meta.len()).unwrap_or(0);
-    let source = crate::demux::FileSource::open(path).map_err(|e| (e.into(), false))?;
+    let len = source.len();
     let total_bytes = Arc::new(move || len) as Arc<dyn Fn() -> u64 + Send + Sync>;
     decode_source(
         inner.clone(),
@@ -2625,6 +2677,19 @@ enum SessionOutcome {
     },
 }
 
+/// Releases a seek's hold (see `Inner::seek_hold`). Called by the current
+/// session once its stream has reported (it holds its own key by then), never
+/// by a superseded one, whose hold belongs to the session that replaces it.
+fn release_seek_hold(inner: &Inner, gen: u64) {
+    if inner.generation.load(Ordering::SeqCst) != gen {
+        return;
+    }
+    let held = std::mem::take(&mut *inner.seek_hold.lock().unwrap());
+    for key in &held {
+        inner.cache.unprotect(key);
+    }
+}
+
 /// Play `first_item` and keep advancing through the queue until it ends, the
 /// generation changes, or a device/stream error occurs.
 #[allow(clippy::too_many_arguments)]
@@ -2689,7 +2754,9 @@ fn run_session(
             return SessionOutcome::Superseded;
         }
         *inner.stream_meta.lock().unwrap() = None;
-        let start = match wait_for_info(inner, &mut stream, gen) {
+        let info = wait_for_info(inner, &mut stream, gen);
+        release_seek_hold(inner, gen);
+        let start = match info {
             Ok(start) => start,
             Err(_) if inner.generation.load(Ordering::SeqCst) != gen => {
                 return SessionOutcome::Superseded;
@@ -3907,7 +3974,7 @@ fn worker_main(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cache::{CacheKey, DiskCache};
+    use crate::cache::{CacheKey, CacheSource, TrackCache};
     use crate::output::NullOutput;
     use crate::source::Segment;
     use std::collections::HashMap;
@@ -4110,14 +4177,21 @@ mod tests {
         }
     }
 
-    fn test_cache() -> Arc<DiskCache> {
+    fn entry_bytes(mut source: CacheSource) -> Vec<u8> {
+        use std::io::Read;
+        let mut out = Vec::new();
+        source.read_to_end(&mut out).unwrap();
+        out
+    }
+
+    fn test_cache() -> Arc<TrackCache> {
         static CACHE_COUNTER: AtomicU32 = AtomicU32::new(0);
         let dir = std::env::temp_dir().join(format!(
             "oxitide-engine-cache-{}-{}",
             std::process::id(),
             CACHE_COUNTER.fetch_add(1, Ordering::SeqCst)
         ));
-        DiskCache::new(dir, 64 * 1024 * 1024)
+        TrackCache::disk(dir, 64 * 1024 * 1024)
     }
 
     fn build_engine(
@@ -4690,6 +4764,7 @@ mod tests {
             assert!(
                 !cache
                     .dir()
+                    .unwrap()
                     .join(format!("{}.meta", key.file_name()))
                     .exists(),
                 "the corrupt entry's sidecar must be evicted"
@@ -4751,6 +4826,7 @@ mod tests {
             );
             assert!(cache
                 .dir()
+                .unwrap()
                 .join(format!("{}.meta", key.file_name()))
                 .is_file());
             let (_, replay) = collect_track(&engine, None);
@@ -4848,7 +4924,7 @@ mod tests {
                         None,
                         tx,
                         StreamBuffer::new(),
-                        Arc::new(Mutex::new(None)),
+                        Arc::new(ProtectSlot::default()),
                         ticket,
                     );
                 });
@@ -4897,12 +4973,20 @@ mod tests {
                 );
                 producer.join().unwrap();
                 cache.unprotect(&key);
-                let path = cache
-                    .lookup(&key)
-                    .expect("cancellation must keep the healthy entry");
-                assert_eq!(std::fs::read(path).unwrap(), clean);
+                let entry = entry_bytes(
+                    cache
+                        .lookup(&key)
+                        .expect("cancellation must keep the healthy entry"),
+                );
+                assert_eq!(entry, clean);
                 assert_eq!(
-                    std::fs::read(cache.dir().join(format!("{}.meta", key.file_name()))).unwrap(),
+                    std::fs::read(
+                        cache
+                            .dir()
+                            .unwrap()
+                            .join(format!("{}.meta", key.file_name()))
+                    )
+                    .unwrap(),
                     meta
                 );
                 let (_, replay) = collect_track(&engine, None);
@@ -9414,10 +9498,296 @@ mod tests {
             Some(500),
             tx,
             buffer,
-            Arc::new(Mutex::new(None)),
+            Arc::new(ProtectSlot::default()),
             engine.inner.ahead_gate.register(true),
         );
         assert_eq!(cache.size_bytes(), 0, "a seek plan must not be cached");
+    }
+
+    /// Spill files this test process left directly in the temp dir: the only
+    /// place Memory mode could leak audio to, since it has no cache dir.
+    /// Disk-mode tests spill into their own cache subdirectories.
+    fn own_spill_files() -> usize {
+        let prefix = format!("spill-{}-", std::process::id());
+        std::fs::read_dir(std::env::temp_dir())
+            .map(|read| {
+                read.flatten()
+                    .filter(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+                    .count()
+            })
+            .unwrap_or(0)
+    }
+
+    #[test]
+    fn memory_mode_replay_is_a_cache_hit_and_writes_no_files() {
+        let (_, files) = fixture_plan();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let output = NullOutput::new();
+        let cache = TrackCache::memory(64 << 20);
+        let engine = Engine::new(
+            Arc::new(FakeResolver {
+                plan: cached_plan("mem://tone", 0xabcd),
+            }),
+            {
+                let calls = calls.clone();
+                move || -> Arc<dyn Fetcher> { Arc::new(CountingFetcher { files, calls }) }
+            },
+            Box::new(output.clone()),
+            Quality::Lossless,
+            cache.clone(),
+            true,
+        );
+        let hits = Arc::new(AtomicUsize::new(0));
+        engine.set_perf_hook({
+            let hits = hits.clone();
+            Arc::new(move |event| {
+                if matches!(event, AudioPerfEvent::CacheHit { track_id: 1 }) {
+                    hits.fetch_add(1, Ordering::SeqCst);
+                }
+            })
+        });
+        let key = CacheKey {
+            track_id: 1,
+            quality: Quality::Lossless,
+            manifest_hash: 0xabcd,
+        };
+        let spills = own_spill_files();
+
+        engine
+            .handle(EngineCmd::PlayTracks {
+                items: vec![item(1)],
+                start: 0,
+            })
+            .unwrap();
+        wait_for(|| !engine.state().playing && output.samples().len() >= 176_400);
+        assert!(
+            cache.lookup(&key).is_some(),
+            "a memory-mode cache miss did not keep the track"
+        );
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
+        let first = calls.load(Ordering::SeqCst);
+
+        engine
+            .handle(EngineCmd::PlayTracks {
+                items: vec![item(1)],
+                start: 0,
+            })
+            .unwrap();
+        wait_for(|| !engine.state().playing && output.samples().len() >= 176_400 * 2);
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            first,
+            "a cache hit still fetched"
+        );
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            1,
+            "the replay was not a cache hit"
+        );
+        assert_eq!(own_spill_files(), spills, "memory mode wrote a spill file");
+        assert!(cache.dir().is_none());
+    }
+
+    /// Review fix: a seek ends the session, so the playing stream drops (and
+    /// unprotects) before the new session's stream protects the key again
+    /// after its resolve. Memory mode evicts on unprotect, so an entry over the
+    /// budget (an oversized hi-res track; here any entry, with a 1-byte budget)
+    /// was dropped in that gap and the seek fetched the track again.
+    #[test]
+    fn memory_mode_seek_keeps_an_over_budget_playing_entry() {
+        let (_, files) = fixture_plan();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let output = NullOutput::new();
+        let cache = TrackCache::memory(1);
+        let engine = Engine::new(
+            Arc::new(FakeResolver {
+                plan: cached_plan("mem://tone", 0xabcd),
+            }),
+            {
+                let calls = calls.clone();
+                move || -> Arc<dyn Fetcher> { Arc::new(CountingFetcher { files, calls }) }
+            },
+            Box::new(PacedOutput {
+                inner: output.clone(),
+                per_frame: ABOUT_REAL_TIME,
+            }),
+            Quality::Lossless,
+            cache.clone(),
+            true,
+        );
+        let hits = Arc::new(AtomicUsize::new(0));
+        engine.set_perf_hook({
+            let hits = hits.clone();
+            Arc::new(move |event| {
+                if matches!(event, AudioPerfEvent::CacheHit { track_id: 1 }) {
+                    hits.fetch_add(1, Ordering::SeqCst);
+                }
+            })
+        });
+        let key = CacheKey {
+            track_id: 1,
+            quality: Quality::Lossless,
+            manifest_hash: 0xabcd,
+        };
+
+        engine
+            .handle(EngineCmd::PlayTracks {
+                items: vec![item(1)],
+                start: 0,
+            })
+            .unwrap();
+        wait_for(|| cache.lookup(&key).is_some() && !output.samples().is_empty());
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        engine.handle(EngineCmd::Seek(1000)).unwrap();
+        wait_for(|| hits.load(Ordering::SeqCst) == 1);
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "the seek fetched the playing track again"
+        );
+        assert!(
+            cache.lookup(&key).is_some(),
+            "the playing entry was evicted by the seek"
+        );
+    }
+
+    /// Serves every URL at once except `mem://tail`, which waits for the gate.
+    struct HoldTailFetcher {
+        files: HashMap<String, Vec<u8>>,
+        gate: Arc<Gate>,
+    }
+
+    impl Fetcher for HoldTailFetcher {
+        fn get(&self, url: &str) -> Result<Vec<u8>> {
+            if url == "mem://tail" {
+                self.gate.wait(1);
+            }
+            self.files
+                .get(url)
+                .cloned()
+                .ok_or_else(|| Error::Fetch(format!("no fixture for {url}")))
+        }
+    }
+
+    #[test]
+    fn memory_mode_seek_writes_no_files() {
+        let (plan, files) = he_aac_fixture(1, "hierarchical");
+        let held = (files["mem://init"].len() + files["mem://head"].len()) as u64;
+        let gate = Arc::new(Gate::new());
+        let cache = TrackCache::memory(64 << 20);
+        let engine = Engine::new(
+            Arc::new(FakeResolver { plan }),
+            {
+                let gate = gate.clone();
+                move || -> Arc<dyn Fetcher> { Arc::new(HoldTailFetcher { files, gate }) }
+            },
+            Box::new(NullOutput::new()),
+            Quality::Lossless,
+            cache.clone(),
+            true,
+        );
+        let spills = own_spill_files();
+        wait_for(|| engine.inner.fetcher.get().is_some());
+        let generation = engine.inner.generation.load(Ordering::SeqCst);
+        // 200 ms is inside the first media segment (1.024 s), so the plan
+        // stays init, head and tail; `seek_ms` alone routes it to scratch.
+        let stream = start_track(
+            &engine.inner,
+            &item(1),
+            OutputMode::Shared,
+            generation,
+            Some(200),
+        );
+        loop {
+            match stream.rx.recv_timeout(Duration::from_secs(5)) {
+                Ok(Ok(StreamEvent::Samples(_))) => break,
+                Ok(Ok(_)) => continue,
+                Ok(Err(e)) => panic!("track failed: {e}"),
+                Err(e) => panic!("no PCM while the tail was held: {e}"),
+            }
+        }
+        assert_eq!(
+            own_spill_files(),
+            spills,
+            "a seek in memory mode wrote a spill file"
+        );
+        assert_eq!(
+            cache.pending_bytes(),
+            held,
+            "the held scratch bytes do not count as pending"
+        );
+
+        gate.release(1);
+        loop {
+            match stream.rx.recv_timeout(Duration::from_secs(5)) {
+                Ok(Ok(_)) => continue,
+                Ok(Err(e)) => panic!("track failed: {e}"),
+                Err(RecvTimeoutError::Disconnected) => break,
+                Err(e) => panic!("track did not finish: {e}"),
+            }
+        }
+        wait_for(|| cache.pending_bytes() == 0);
+        assert_eq!(cache.pending_bytes(), 0, "the scratch bytes were not freed");
+        assert_eq!(cache.size_bytes(), 0, "a seek plan must not be cached");
+        assert_eq!(own_spill_files(), spills);
+    }
+
+    #[test]
+    fn stream_dropped_during_resolve_leaves_no_protection() {
+        let (_, files) = fixture_plan();
+        let gate = Arc::new(Gate::new());
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let cache = TrackCache::memory(64 << 20);
+        let engine = Engine::new(
+            Arc::new(GatedResolver {
+                plan: cached_plan("mem://tone", 0xabcd),
+                gate: gate.clone(),
+                order: order.clone(),
+            }),
+            move || -> Arc<dyn Fetcher> { Arc::new(crate::fetch::MapFetcher { files }) },
+            Box::new(NullOutput::new()),
+            Quality::Lossless,
+            cache.clone(),
+            true,
+        );
+        // `CacheMiss` fires just after the point where the key is protected.
+        let misses = Arc::new(AtomicUsize::new(0));
+        engine.set_perf_hook({
+            let misses = misses.clone();
+            Arc::new(move |event| {
+                if matches!(event, AudioPerfEvent::CacheMiss { track_id: 1 }) {
+                    misses.fetch_add(1, Ordering::SeqCst);
+                }
+            })
+        });
+        let key = CacheKey {
+            track_id: 1,
+            quality: Quality::Lossless,
+            manifest_hash: 0xabcd,
+        };
+        wait_for(|| engine.inner.fetcher.get().is_some());
+        let generation = engine.inner.generation.load(Ordering::SeqCst);
+        let stream = start_track(
+            &engine.inner,
+            &item(1),
+            OutputMode::Shared,
+            generation,
+            None,
+        );
+        wait_for_order(&order, 1);
+        drop(stream); // a skip while the track is still resolving
+        gate.release(1);
+        wait_for(|| misses.load(Ordering::SeqCst) == 1);
+        assert_eq!(
+            misses.load(Ordering::SeqCst),
+            1,
+            "the decode thread never got past the resolve"
+        );
+        assert!(
+            !cache.is_protected(&key),
+            "a stream dropped before its key was known left the key protected"
+        );
     }
 
     #[test]
@@ -9468,7 +9838,7 @@ mod tests {
             .lookup(&key)
             .expect("the corrupt entry was not replaced");
         assert_eq!(
-            std::fs::metadata(replaced).unwrap().len(),
+            entry_bytes(replaced).len() as u64,
             files["mem://tone"].len() as u64,
             "the refetched bytes were not re-cached"
         );
